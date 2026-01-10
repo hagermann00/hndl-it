@@ -63,7 +63,7 @@ class BrowserController:
         logger.info("Connected to Chrome via WebSocket.")
 
     def _launch_chrome(self) -> bool:
-        """Attempts to launch Chrome with remote debugging enabled."""
+        """Launches Chrome with hndl-it specific profile - visually distinct and isolated."""
         import subprocess
         import os
         
@@ -82,22 +82,33 @@ class BrowserController:
         if not chrome_path:
             logger.error("Could not find chrome.exe in standard locations.")
             return False
-            
+        
+        # Dedicated hndl-it profile - completely separate from user's Chrome
         user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../chrome_profile'))
         os.makedirs(user_data_dir, exist_ok=True)
         
+        # HNDL-IT CHROME: Distinctive and isolated
         args = [
             chrome_path,
             "--remote-debugging-port=9222",
             f"--user-data-dir={user_data_dir}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-extensions",              # No user extensions
+            "--disable-sync",                     # No sync with user account
+            "--disable-background-networking",    # Reduce interference
+            "--new-window",                       # Always new window
+            "--window-size=1200,800",             # Consistent size
+            "--window-position=100,100",          # Known position
+            "--force-dark-mode",                  # VISUAL: Dark mode for distinction
+            "--enable-features=WebContentsForceDark",  # Force dark on all sites
             "about:blank"
         ]
         
         try:
-            logger.info(f"Launching Chrome: {args}")
-            subprocess.Popen(args, close_fds=True, shell=False)
+            logger.info(f"Launching hndl-it Chrome (isolated profile, dark mode)...")
+            subprocess.Popen(args, close_fds=True, shell=False, 
+                           creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)  # Process isolation
             return True
         except Exception as e:
             logger.error(f"Failed to launch Chrome: {e}")
