@@ -494,11 +494,11 @@ class ReaderPanel(QWidget):
         self.apply_styles()
     
     def init_ui(self):
-        self.setFixedSize(350, 200)  # Compact by default
+        self.setFixedSize(600, 400)  # Larger panel for big text
         
         self.container = QFrame(self)
         self.container.setObjectName("container")
-        self.container.setGeometry(0, 0, 350, 200)
+        self.container.setGeometry(0, 0, 600, 400)
         
         self.layout = QVBoxLayout(self.container)
         self.layout.setContentsMargins(12, 12, 12, 12)
@@ -523,10 +523,10 @@ class ReaderPanel(QWidget):
         title_bar.addWidget(close_btn)
         self.layout.addLayout(title_bar)
         
-        # Text area (always visible)
+        # Text area (scrollable, no limit)
         self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("Drop text or file here...")
-        self.text_edit.setFixedHeight(80)
+        self.text_edit.setPlaceholderText("Paste or drop text here...")
+        self.text_edit.setMinimumHeight(200)
         self.layout.addWidget(self.text_edit)
         
         # Progress bar
@@ -594,14 +594,14 @@ class ReaderPanel(QWidget):
     def toggle_expand(self):
         if self.is_expanded:
             self.expanded_frame.hide()
-            self.setFixedSize(350, 200)
-            self.container.setGeometry(0, 0, 350, 200)
+            self.setFixedSize(600, 400)
+            self.container.setGeometry(0, 0, 600, 400)
             self.expand_btn.setText("◀")
             self.is_expanded = False
         else:
             self.expanded_frame.show()
-            self.setFixedSize(350, 300)
-            self.container.setGeometry(0, 0, 350, 300)
+            self.setFixedSize(600, 500)
+            self.container.setGeometry(0, 0, 600, 500)
             self.expand_btn.setText("▼")
             self.is_expanded = True
     
