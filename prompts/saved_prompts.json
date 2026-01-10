@@ -1,0 +1,14 @@
+{
+    "model_query": {
+        "name": "Multi-LLM Model Query",
+        "description": "Comprehensive model architecture decision query",
+        "file": "docs/MULTI_LLM_MODEL_QUERY.md",
+        "targets": [
+            "claude",
+            "gpt4",
+            "gemini",
+            "perplexity",
+            "deepseek"
+        ]
+    }
+}

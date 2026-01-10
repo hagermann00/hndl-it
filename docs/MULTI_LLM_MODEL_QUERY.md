@@ -326,6 +326,9 @@ Structure your response as:
 
 ## QUESTIONS FOR CLARIFICATION
 [If anything is unclear]
+
+## FINAL TASK
+After providing your response, paste it into the shared Google Doc for collection and synthesis with other LLM responses.
 ```
 
 ---
