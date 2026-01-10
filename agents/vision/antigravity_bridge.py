@@ -30,7 +30,7 @@ print(f"🖥️  Real Screen: {REAL_WIDTH}x{REAL_HEIGHT}")
 print(f"👁️  AI View: {AI_VIEW_WIDTH}x{AI_VIEW_HEIGHT}")
 
 SCREENSHOTS_DIR = Path.home() / "Pictures" / "Screenshots"
-OUTPUT_FILE = Path("C:/IIWII_DB/hndl-it/logs/vision_result.txt")
+OUTPUT_FILE = Path("D:/IIWII_DB/hndl-it/logs/vision_result.txt")
 
 def log(msg):
     print(msg)

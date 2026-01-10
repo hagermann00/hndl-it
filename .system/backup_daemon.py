@@ -1,8 +1,9 @@
 """
 HNDL-IT Smart Backup Daemon
-- Only syncs when files actually change
+- Only syncs when files actually change  
+- Logs to D: drive (not C:)
+- Archives to Google Drive
 - Runs headless in background
-- Logs what it's checking and backing up
 """
 
 import subprocess
@@ -13,14 +14,17 @@ import hashlib
 import sys
 from pathlib import Path
 
-# Configuration
+# === PATHS (D: drive for logs, Google Drive for archive) ===
 SOURCE = Path(r"C:\IIWII_DB\hndl-it")
-DEST = Path(r"D:\IIWII_DB\hndl-it")
-LOG_FILE = Path(r"D:\IIWII_DB\.backup_log.txt")
+DEST_LOCAL = Path(r"D:\IIWII_DB\hndl-it")
+DEST_GDRIVE = Path(r"H:\My Drive\IIWII_ARCHIVE\hndl-it")
+LOG_FILE = Path(r"D:\IIWII_DB\logs\backup_daemon.log")
+
+# === TIMING ===
 CHECK_INTERVAL = 300  # Check for changes every 5 minutes
 SYNC_COOLDOWN = 900   # Don't sync more than once per 15 minutes
 
-# Excluded from hash calculation
+# === EXCLUSIONS ===
 EXCLUDE_DIRS = {'.git', '__pycache__', 'chrome_profile', 'node_modules', '.venv', 'venv', '.system'}
 EXCLUDE_EXTS = {'.log', '.tmp', '.pyc'}
 
@@ -45,7 +49,6 @@ def get_folder_state():
     now = time.time()
     
     for root, dirs, files in os.walk(SOURCE):
-        # Skip excluded directories
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
         
         for fname in sorted(files):
@@ -57,7 +60,6 @@ def get_folder_state():
                 file_count += 1
                 hasher.update(f"{fpath}:{stat.st_mtime}:{stat.st_size}".encode())
                 
-                # Track files modified in last 5 minutes
                 if now - stat.st_mtime < 300:
                     rel_path = fpath.relative_to(SOURCE)
                     changed_files.append(str(rel_path))
@@ -66,17 +68,12 @@ def get_folder_state():
     
     return hasher.hexdigest()
 
-def sync():
-    """Efficient sync using robocopy"""
-    log(f"SYNC STARTED - {file_count} files tracked")
-    if changed_files:
-        log(f"Recently changed: {', '.join(changed_files[:10])}" + 
-            (f" (+{len(changed_files)-10} more)" if len(changed_files) > 10 else ""))
-    
+def sync_to(dest, name):
+    """Sync to a destination"""
     cmd = [
-        'robocopy', str(SOURCE), str(DEST),
+        'robocopy', str(SOURCE), str(dest),
         '/MIR',
-        '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+        '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv', 'logs',
         '/XF', '*.log', '*.tmp',
         '/NP', '/NFL', '/NDL', '/NJH', '/NJS',
         '/R:1', '/W:1'
@@ -85,9 +82,21 @@ def sync():
     result = subprocess.run(cmd, capture_output=True, text=True)
     
     if result.returncode <= 7:
-        log(f"SYNC COMPLETE - Exit code {result.returncode}")
+        log(f"  → {name}: OK")
     else:
-        log(f"SYNC ERROR - Exit code {result.returncode}")
+        log(f"  → {name}: ERROR ({result.returncode})")
+
+def sync():
+    """Sync to D: drive and Google Drive"""
+    log(f"SYNC STARTED - {file_count} files")
+    if changed_files:
+        log(f"  Changed: {', '.join(changed_files[:5])}" + 
+            (f" (+{len(changed_files)-5} more)" if len(changed_files) > 5 else ""))
+    
+    sync_to(DEST_LOCAL, "D: drive")
+    sync_to(DEST_GDRIVE, "Google Drive")
+    
+    log("SYNC COMPLETE")
 
 def run():
     global last_hash, last_sync
@@ -95,14 +104,13 @@ def run():
     log("=" * 50)
     log("BACKUP DAEMON STARTED")
     log(f"Source: {SOURCE}")
-    log(f"Dest: {DEST}")
-    log(f"Check interval: {CHECK_INTERVAL}s ({CHECK_INTERVAL//60} min)")
-    log(f"Sync cooldown: {SYNC_COOLDOWN}s ({SYNC_COOLDOWN//60} min)")
+    log(f"Dest 1: {DEST_LOCAL}")
+    log(f"Dest 2: {DEST_GDRIVE}")
+    log(f"Check: {CHECK_INTERVAL//60} min | Cooldown: {SYNC_COOLDOWN//60} min")
     log("=" * 50)
     
-    # Initial sync
     last_hash = get_folder_state()
-    log(f"Initial state: {file_count} files")
+    log(f"Initial: {file_count} files")
     sync()
     last_sync = time.time()
     
@@ -113,20 +121,18 @@ def run():
         time_since_sync = time.time() - last_sync
         
         if current_hash != last_hash:
-            log(f"CHANGES DETECTED - {len(changed_files)} files modified recently")
+            log(f"CHANGES: {len(changed_files)} files modified")
             if time_since_sync >= SYNC_COOLDOWN:
                 sync()
                 last_hash = current_hash
                 last_sync = time.time()
             else:
-                remaining = int(SYNC_COOLDOWN - time_since_sync)
-                log(f"Cooldown active - sync in {remaining}s")
+                remaining = int((SYNC_COOLDOWN - time_since_sync) / 60)
+                log(f"Cooldown: {remaining} min remaining")
         else:
-            log(f"No changes - {file_count} files checked")
+            log(f"No changes ({file_count} files)")
 
 if __name__ == "__main__":
-    # Headless mode - redirect stdout/stderr to null
-    if '--headless' in sys.argv or True:  # Always headless
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
     run()
