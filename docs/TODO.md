@@ -42,9 +42,16 @@
 - [ ] **Type and enter** OR **Speak and enter(EXTEND SILEBNCE)**
 - [ ] **Verbal input button** on all qualifying modules FROM A  SINGULR ICONM IN LINE ON TH RIGHT COLUM OR ON TEH MOUNTING BAR  THEOREHTICALL
 
-### Cross-Module Standard
+### 🎤 Voice Input System (NEXT UP)
 
-- [ ] **Voice input button** on all modules that support it (prep for next module)
+- [ ] **Speech-to-text for hndl-it** - Direct audio input to router
+- [ ] **Custom hotkey** (e.g. Ctrl+Shift+H) routes to hndl-it voice input
+- [ ] **Keep Windows Win+H** for native dictation (don't override)
+- [ ] **Extended silence detection** = end of input, auto-submit
+- [ ] **Visual indicator** when listening (pulsing ring?)
+- [ ] **Works globally** - any app, routes to hndl-it
+
+### Cross-Module Standard
 
 ---
 
