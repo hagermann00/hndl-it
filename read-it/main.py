@@ -268,6 +268,35 @@ class FloatingIcon(QWidget):
         if self._dragging and not self._drag_started:
             self.clicked.emit()
         self._dragging = False
+    
+    def contextMenuEvent(self, event):
+        """Right-click menu with Restart/Quit options."""
+        from PyQt6.QtWidgets import QMenu
+        
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {COLORS['bg_dark']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['primary']};
+            }}
+            QMenu::item:selected {{
+                background-color: {COLORS['primary_dim']};
+            }}
+        """)
+        
+        restart_action = menu.addAction("🔄 Restart")
+        menu.addSeparator()
+        quit_action = menu.addAction("❌ Quit")
+        
+        action = menu.exec(event.globalPos())
+        
+        if action == restart_action:
+            import subprocess
+            subprocess.Popen([sys.executable, __file__])
+            QApplication.quit()
+        elif action == quit_action:
+            QApplication.quit()
 
 
 # ============================================================================
@@ -572,7 +601,7 @@ class ReadItApp:
         
         # Position icon
         screen = self.app.primaryScreen().availableGeometry()
-        self.icon.move(screen.width() - 100, screen.height() - 100)
+        self.icon.move(screen.width() - 100, screen.height() - 80)
     
     def toggle_panel(self):
         if self.panel.isVisible():
