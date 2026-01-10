@@ -1,9 +1,8 @@
 """
 HNDL-IT Smart Backup Daemon
-- Only syncs when files actually change  
-- Logs to D: drive (not C:)
-- Archives to Google Drive
-- Runs headless in background
+- All logs go STRAIGHT to Google Drive (30TB)
+- Heavy, thorough logging - everything recorded
+- No intermediate storage
 """
 
 import subprocess
@@ -14,19 +13,19 @@ import hashlib
 import sys
 from pathlib import Path
 
-# === PATHS (D: drive for logs, Google Drive for archive) ===
+# === ALL PATHS GO TO GOOGLE DRIVE ===
 SOURCE = Path(r"C:\IIWII_DB\hndl-it")
-DEST_LOCAL = Path(r"D:\IIWII_DB\hndl-it")
 DEST_GDRIVE = Path(r"H:\My Drive\IIWII_ARCHIVE\hndl-it")
-LOG_FILE = Path(r"D:\IIWII_DB\logs\backup_daemon.log")
+LOG_DIR = Path(r"H:\My Drive\IIWII_ARCHIVE\logs\hndl-it")
+LOG_FILE = LOG_DIR / "backup_daemon.log"
 
 # === TIMING ===
-CHECK_INTERVAL = 300  # Check for changes every 5 minutes
-SYNC_COOLDOWN = 900   # Don't sync more than once per 15 minutes
+CHECK_INTERVAL = 300  # Check every 5 minutes
+SYNC_COOLDOWN = 900   # Sync every 15 minutes max
 
-# === EXCLUSIONS ===
-EXCLUDE_DIRS = {'.git', '__pycache__', 'chrome_profile', 'node_modules', '.venv', 'venv', '.system'}
-EXCLUDE_EXTS = {'.log', '.tmp', '.pyc'}
+# === EXCLUSIONS (minimal - we want everything) ===
+EXCLUDE_DIRS = {'chrome_profile', '__pycache__', '.git', 'node_modules', '.venv', 'venv'}
+EXCLUDE_EXTS = {'.tmp', '.pyc'}
 
 last_hash = None
 last_sync = 0
@@ -34,14 +33,15 @@ file_count = 0
 changed_files = []
 
 def log(msg):
+    """All logs go STRAIGHT to Google Drive"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = f"[{timestamp}] {msg}"
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     with open(LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(entry + '\n')
 
 def get_folder_state():
-    """Get folder state - returns hash and list of recently changed files"""
+    """Get folder state with detailed tracking"""
     global file_count, changed_files
     hasher = hashlib.md5()
     file_count = 0
@@ -60,6 +60,7 @@ def get_folder_state():
                 file_count += 1
                 hasher.update(f"{fpath}:{stat.st_mtime}:{stat.st_size}".encode())
                 
+                # Track ALL files modified in last 5 minutes
                 if now - stat.st_mtime < 300:
                     rel_path = fpath.relative_to(SOURCE)
                     changed_files.append(str(rel_path))
@@ -68,56 +69,52 @@ def get_folder_state():
     
     return hasher.hexdigest()
 
-def sync_to(dest, name, exclude_logs=False):
-    """Sync to a destination"""
+def sync():
+    """Sync EVERYTHING to Google Drive"""
+    log(f"SYNC STARTED - {file_count} files tracked")
+    
+    # Log ALL changed files (thorough)
+    if changed_files:
+        for f in changed_files:
+            log(f"  CHANGED: {f}")
+    
     cmd = [
-        'robocopy', str(SOURCE), str(dest),
+        'robocopy', str(SOURCE), str(DEST_GDRIVE),
         '/MIR',
         '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
-        '/XF', '*.tmp',
-        '/NP', '/NFL', '/NDL', '/NJH', '/NJS',
-        '/R:1', '/W:1'
+        '/XF', '*.tmp', '*.pyc',
+        '/NP', '/R:1', '/W:1'
     ]
-    
-    # Don't send logs to Google Drive - they grow too fast
-    if exclude_logs:
-        cmd.insert(6, 'logs')  # Add 'logs' to /XD exclusions
-        cmd.extend(['/XF', '*.log'])  # Also exclude .log files
     
     result = subprocess.run(cmd, capture_output=True, text=True)
     
+    # Log robocopy output for thorough record
+    if result.stdout:
+        for line in result.stdout.strip().split('\n')[-5:]:  # Last 5 lines
+            if line.strip():
+                log(f"  ROBOCOPY: {line.strip()}")
+    
     if result.returncode <= 7:
-        log(f"  → {name}: OK")
+        log(f"SYNC COMPLETE (exit {result.returncode})")
     else:
-        log(f"  → {name}: ERROR ({result.returncode})")
-
-def sync():
-    """Sync to D: drive and Google Drive"""
-    log(f"SYNC STARTED - {file_count} files")
-    if changed_files:
-        log(f"  Changed: {', '.join(changed_files[:5])}" + 
-            (f" (+{len(changed_files)-5} more)" if len(changed_files) > 5 else ""))
-    
-    # D: drive = Local mirror + overflow from C:
-    sync_to(DEST_LOCAL, "D: drive (mirror)", exclude_logs=False)
-    # Google Drive = 30TB archive - gets EVERYTHING
-    sync_to(DEST_GDRIVE, "Google Drive (30TB archive)", exclude_logs=False)
-    
-    log("SYNC COMPLETE")
+        log(f"SYNC ERROR (exit {result.returncode})")
+        if result.stderr:
+            log(f"  ERROR: {result.stderr[:200]}")
 
 def run():
     global last_hash, last_sync
     
-    log("=" * 50)
+    log("=" * 60)
     log("BACKUP DAEMON STARTED")
     log(f"Source: {SOURCE}")
-    log(f"Dest 1: {DEST_LOCAL}")
-    log(f"Dest 2: {DEST_GDRIVE}")
-    log(f"Check: {CHECK_INTERVAL//60} min | Cooldown: {SYNC_COOLDOWN//60} min")
-    log("=" * 50)
+    log(f"Archive: {DEST_GDRIVE} (Google Drive 30TB)")
+    log(f"Logs: {LOG_DIR} (Google Drive)")
+    log(f"Check interval: {CHECK_INTERVAL//60} min")
+    log(f"Sync cooldown: {SYNC_COOLDOWN//60} min")
+    log("=" * 60)
     
     last_hash = get_folder_state()
-    log(f"Initial: {file_count} files")
+    log(f"Initial scan: {file_count} files")
     sync()
     last_sync = time.time()
     
@@ -128,16 +125,16 @@ def run():
         time_since_sync = time.time() - last_sync
         
         if current_hash != last_hash:
-            log(f"CHANGES: {len(changed_files)} files modified")
+            log(f"CHANGES DETECTED - {len(changed_files)} files modified")
             if time_since_sync >= SYNC_COOLDOWN:
                 sync()
                 last_hash = current_hash
                 last_sync = time.time()
             else:
                 remaining = int((SYNC_COOLDOWN - time_since_sync) / 60)
-                log(f"Cooldown: {remaining} min remaining")
+                log(f"Cooldown active - {remaining} min until next sync")
         else:
-            log(f"No changes ({file_count} files)")
+            log(f"Heartbeat - {file_count} files, no changes")
 
 if __name__ == "__main__":
     sys.stdout = open(os.devnull, 'w')
