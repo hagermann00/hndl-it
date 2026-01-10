@@ -102,6 +102,7 @@ class TTSWorker(QThread):
 # ============================================================================
 class SelectionPill(QWidget):
     read_requested = pyqtSignal(str)  # Emits the text to read
+    summary_requested = pyqtSignal(str)  # Emits text for summary
     
     def __init__(self):
         super().__init__()
@@ -109,18 +110,17 @@ class SelectionPill(QWidget):
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
             Qt.WindowType.Tool |
-            Qt.WindowType.ToolTip  # Doesn't steal focus
+            Qt.WindowType.ToolTip
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         
-        self.setFixedSize(100, 36)
+        self.setFixedSize(160, 36)
         self.pending_text = ""
         
         self.init_ui()
         self.apply_styles()
         
-        # Auto-hide timer
         self.hide_timer = QTimer()
         self.hide_timer.setSingleShot(True)
         self.hide_timer.timeout.connect(self.hide)
@@ -128,15 +128,21 @@ class SelectionPill(QWidget):
     def init_ui(self):
         self.container = QFrame(self)
         self.container.setObjectName("pill")
-        self.container.setGeometry(0, 0, 100, 36)
+        self.container.setGeometry(0, 0, 160, 36)
         
         layout = QHBoxLayout(self.container)
         layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         
-        self.read_btn = QPushButton("🔊 Read")
-        self.read_btn.clicked.connect(self.on_read_click)
-        layout.addWidget(self.read_btn)
+        # Play button
+        self.play_btn = QPushButton("▶ Play")
+        self.play_btn.clicked.connect(self.on_play_click)
+        layout.addWidget(self.play_btn)
+        
+        # Summary button
+        self.summary_btn = QPushButton("📝 Sum")
+        self.summary_btn.clicked.connect(self.on_summary_click)
+        layout.addWidget(self.summary_btn)
     
     def apply_styles(self):
         self.container.setStyleSheet(f"""
@@ -150,7 +156,8 @@ class SelectionPill(QWidget):
                 color: {COLORS['primary']};
                 border: none;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 11px;
+                padding: 2px 6px;
             }}
             QPushButton:hover {{
                 color: {COLORS['accent']};
@@ -158,25 +165,125 @@ class SelectionPill(QWidget):
         """)
     
     def show_at_cursor(self, text: str):
-        """Show pill near current cursor position with the given text."""
         self.pending_text = text
-        
-        # Get cursor position
         cursor_pos = QCursor.pos()
-        
-        # Offset slightly below and to the right
         self.move(cursor_pos.x() + 10, cursor_pos.y() + 20)
         self.show()
         self.raise_()
-        
-        # Auto-hide after 4 seconds
-        self.hide_timer.start(4000)
+        self.hide_timer.start(5000)
     
-    def on_read_click(self):
+    def on_play_click(self):
         self.hide_timer.stop()
         self.hide()
         if self.pending_text:
             self.read_requested.emit(self.pending_text)
+    
+    def on_summary_click(self):
+        self.hide_timer.stop()
+        self.hide()
+        if self.pending_text:
+            self.summary_requested.emit(self.pending_text)
+
+
+# ============================================================================
+# PLAYBACK OVERLAY - Controls that appear on the icon when playing
+# ============================================================================
+class PlaybackOverlay(QWidget):
+    play_pause_clicked = pyqtSignal()
+    back_clicked = pyqtSignal()
+    speed_changed = pyqtSignal(int)
+    
+    def __init__(self, parent_icon):
+        super().__init__()
+        self.parent_icon = parent_icon
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        self.setFixedSize(140, 40)
+        self.is_playing = False
+        
+        self.init_ui()
+        self.apply_styles()
+    
+    def init_ui(self):
+        self.container = QFrame(self)
+        self.container.setObjectName("overlay")
+        self.container.setGeometry(0, 0, 140, 40)
+        
+        layout = QHBoxLayout(self.container)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
+        
+        # Back 10 sec
+        self.back_btn = QPushButton("⏪")
+        self.back_btn.setFixedSize(28, 28)
+        self.back_btn.setToolTip("Back 10 sec")
+        self.back_btn.clicked.connect(lambda: self.back_clicked.emit())
+        layout.addWidget(self.back_btn)
+        
+        # Play/Pause
+        self.play_btn = QPushButton("⏸")
+        self.play_btn.setFixedSize(32, 32)
+        self.play_btn.clicked.connect(self.toggle_play)
+        layout.addWidget(self.play_btn)
+        
+        # Speed selector
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems(["0.75x", "1x", "1.25x", "1.5x", "2x"])
+        self.speed_combo.setCurrentIndex(1)
+        self.speed_combo.setFixedWidth(50)
+        self.speed_combo.currentIndexChanged.connect(self.on_speed_change)
+        layout.addWidget(self.speed_combo)
+    
+    def apply_styles(self):
+        self.container.setStyleSheet(f"""
+            QFrame#overlay {{
+                background-color: {COLORS['bg_dark']};
+                border: 2px solid {COLORS['primary']};
+                border-radius: 20px;
+            }}
+            QPushButton {{
+                background-color: {COLORS['bg_panel']};
+                color: {COLORS['primary']};
+                border: 1px solid {COLORS['primary_dim']};
+                border-radius: 14px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary_dim']};
+            }}
+            QComboBox {{
+                background-color: {COLORS['bg_input']};
+                color: {COLORS['primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 4px;
+                padding: 2px;
+                font-size: 10px;
+            }}
+        """)
+    
+    def toggle_play(self):
+        self.is_playing = not self.is_playing
+        self.play_btn.setText("▶" if not self.is_playing else "⏸")
+        self.play_pause_clicked.emit()
+    
+    def on_speed_change(self, index):
+        speeds = [75, 100, 125, 150, 200]
+        self.speed_changed.emit(speeds[index])
+    
+    def show_near_icon(self):
+        icon_pos = self.parent_icon.pos()
+        self.move(icon_pos.x() - 80, icon_pos.y() + 65)
+        self.show()
+        self.raise_()
+    
+    def set_playing(self, playing: bool):
+        self.is_playing = playing
+        self.play_btn.setText("⏸" if playing else "▶")
 
 
 # ============================================================================
@@ -588,11 +695,18 @@ class ReadItApp:
         
         # Reader panel
         self.panel = ReaderPanel()
-        # Don't hide icon when panel closes - icon stays visible always
+        self.panel.tts.finished_speaking.connect(self.on_playback_finished)
+        
+        # Playback overlay (controls near icon)
+        self.playback_overlay = PlaybackOverlay(self.icon)
+        self.playback_overlay.play_pause_clicked.connect(self.toggle_playback)
+        self.playback_overlay.back_clicked.connect(self.back_10_sec)
+        self.playback_overlay.speed_changed.connect(self.change_speed)
         
         # Selection pill (clipboard popup)
         self.pill = SelectionPill()
         self.pill.read_requested.connect(self.read_text)
+        self.pill.summary_requested.connect(self.summarize_text)
         
         # Clipboard watcher
         self.clipboard = self.app.clipboard()
@@ -608,31 +722,55 @@ class ReadItApp:
             self.panel.hide()
         else:
             icon_pos = self.icon.pos()
-            # Panel right edge 70px left of icon left edge
             panel_x = icon_pos.x() - 70 - self.panel.width()
             self.panel.move(panel_x, icon_pos.y() - 150)
             self.panel.show()
-        # Icon always stays visible
     
     def on_clipboard_change(self):
-        """Called when clipboard content changes."""
         text = self.clipboard.text()
-        # Only show pill if there's new text (not from us, not empty)
         if text and text != self.last_clipboard and len(text.strip()) > 3:
             self.last_clipboard = text
-            # Show pill near cursor
             self.pill.show_at_cursor(text)
     
     def read_text(self, text: str):
-        """Read the given text using TTS."""
-        # Open panel with text and start reading
+        """Read text and show playback overlay."""
         self.panel.text_edit.setText(text)
+        self.panel.start_reading()
+        self.playback_overlay.set_playing(True)
+        self.playback_overlay.show_near_icon()
+    
+    def summarize_text(self, text: str):
+        """Summarize text (placeholder - will use local LLM later)."""
+        # For now, just show first 200 chars as summary
+        summary = text[:200] + "..." if len(text) > 200 else text
+        self.panel.text_edit.setText(f"📝 Summary:\n\n{summary}")
         icon_pos = self.icon.pos()
-        # Panel right edge 70px left of icon left edge
         panel_x = icon_pos.x() - 70 - self.panel.width()
         self.panel.move(panel_x, icon_pos.y() - 150)
         self.panel.show()
-        self.panel.start_reading()
+    
+    def toggle_playback(self):
+        if self.panel.tts.is_playing:
+            if self.panel.tts.is_paused:
+                self.panel.tts.resume()
+            else:
+                self.panel.tts.pause()
+        else:
+            self.panel.start_reading()
+    
+    def back_10_sec(self):
+        """Go back ~10 sentences (approximation)."""
+        if self.panel.tts.current_chunk > 2:
+            self.panel.tts.current_chunk -= 2
+    
+    def change_speed(self, rate: int):
+        """Change TTS speed."""
+        actual_rate = int(175 * rate / 100)
+        self.panel.tts.set_rate(actual_rate)
+    
+    def on_playback_finished(self):
+        self.playback_overlay.set_playing(False)
+        self.playback_overlay.hide()
     
     def run(self):
         self.icon.show()
