@@ -475,6 +475,40 @@ def launch_all():
     logger.info("  • Right-click tray for menu")
     logger.info("=" * 50)
     
+    # ========== Start Agent Handlers ==========
+    import subprocess
+    agent_processes = []
+    
+    agent_scripts = [
+        ("read", os.path.join(PROJECT_ROOT, "read-it", "ipc_handler.py")),
+        ("browser", os.path.join(PROJECT_ROOT, "agents", "browser", "ipc_handler.py")),
+        # ("desktop", os.path.join(PROJECT_ROOT, "agents", "desktop", "ipc_handler.py")),  # Needs pyautogui
+    ]
+    
+    for name, script in agent_scripts:
+        if os.path.exists(script):
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, script],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                )
+                agent_processes.append((name, proc))
+                logger.info(f"✅ Started {name} agent (PID: {proc.pid})")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to start {name} agent: {e}")
+    
+    # Cleanup agents on exit
+    import atexit
+    def cleanup_agents():
+        for name, proc in agent_processes:
+            try:
+                proc.terminate()
+            except:
+                pass
+    atexit.register(cleanup_agents)
+    
     sys.exit(app.exec())
 
 
