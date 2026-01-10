@@ -494,11 +494,11 @@ class ReaderPanel(QWidget):
         self.apply_styles()
     
     def init_ui(self):
-        self.setFixedSize(600, 400)  # Larger panel for big text
+        self.setFixedSize(350, 250)  # Compact panel
         
         self.container = QFrame(self)
         self.container.setObjectName("container")
-        self.container.setGeometry(0, 0, 600, 400)
+        self.container.setGeometry(0, 0, 350, 250)
         
         self.layout = QVBoxLayout(self.container)
         self.layout.setContentsMargins(12, 12, 12, 12)
@@ -594,14 +594,14 @@ class ReaderPanel(QWidget):
     def toggle_expand(self):
         if self.is_expanded:
             self.expanded_frame.hide()
-            self.setFixedSize(600, 400)
-            self.container.setGeometry(0, 0, 600, 400)
+            self.setFixedSize(350, 250)
+            self.container.setGeometry(0, 0, 350, 250)
             self.expand_btn.setText("◀")
             self.is_expanded = False
         else:
             self.expanded_frame.show()
-            self.setFixedSize(600, 500)
-            self.container.setGeometry(0, 0, 600, 500)
+            self.setFixedSize(350, 350)
+            self.container.setGeometry(0, 0, 350, 350)
             self.expand_btn.setText("▼")
             self.is_expanded = True
     
