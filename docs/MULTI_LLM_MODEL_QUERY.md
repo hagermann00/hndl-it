@@ -41,13 +41,23 @@ You are being asked to provide an **in-depth, multi-perspective analysis** of th
 | Component | Specification | Notes |
 |-----------|---------------|-------|
 | **GPU** | NVIDIA RTX 2060 | 12GB VRAM |
+| **CPU** | Intel i7-8700 | 6 cores / 12 threads, 3.2GHz base |
 | **System RAM** | 48GB DDR4 | Available for model offloading |
 | **Storage** | 256GB NVMe SSD (C:) | OS + Active Code |
 | | 500GB HDD (D:) | Models, Backups, Overflow |
 | | 30TB Google Drive | Cloud Archive |
-| **CPU** | (Unspecified modern Intel/AMD) | For CPU inference if needed |
 
 **TESTED CAPACITY:** The system has been verified to run models up to **24GB effective memory** (12GB VRAM + 12GB RAM offload) without crashes or instability.
+
+### Financial Reality
+
+| Timeframe | Revenue Target | Context |
+|-----------|----------------|---------|
+| **ASAP** | $1,500/month | Life-changing. Urgent. Survival. |
+| **Ideal** | $5,000+/month | Sustainable, comfortable |
+| **Long-term** | $25,000+/month | Full potential realized |
+
+**Target Markets:** "The ones that are paying." No ideology - follow the money. Whatever market segment will pay for AI automation tools.
 
 ### Current Software Stack
 
