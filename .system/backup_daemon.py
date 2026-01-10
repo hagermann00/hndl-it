@@ -1,8 +1,11 @@
 """
-HNDL-IT Smart Backup Daemon
-- All logs go STRAIGHT to Google Drive (30TB)
-- Heavy, thorough logging - everything recorded
-- No intermediate storage
+HNDL-IT Complete Backup & Logging System
+=========================================
+- Live log flow → Google Drive
+- D: drive = Real-time working clone
+- Periodic versioning with timestamps
+- Log rotation and compression
+- Best practice folder structure
 """
 
 import subprocess
@@ -11,130 +14,162 @@ import datetime
 import os
 import hashlib
 import sys
+import gzip
+import shutil
 from pathlib import Path
 
-# === ALL PATHS GO TO GOOGLE DRIVE ===
+# === FOLDER STRUCTURE (Best Practices) ===
+#
+# D:\IIWII_DB\
+# ├── hndl-it\              ← Real-time clone (can run if C: dies)
+# └── intermediate\         ← Temp files, overflow from C:
+#
+# H:\My Drive\IIWII_ARCHIVE\
+# ├── hndl-it\              ← Current code archive
+# ├── logs\
+# │   ├── live\             ← Live log stream
+# │   └── archive\          ← Compressed old logs
+# └── versions\
+#     └── YYYY-MM-DD_HH\    ← Periodic snapshots
+
+# === PATHS ===
 SOURCE = Path(r"C:\IIWII_DB\hndl-it")
-DEST_GDRIVE = Path(r"H:\My Drive\IIWII_ARCHIVE\hndl-it")
-LOG_DIR = Path(r"H:\My Drive\IIWII_ARCHIVE\logs\hndl-it")
-LOG_FILE = LOG_DIR / "backup_daemon.log"
+CLONE_D = Path(r"D:\IIWII_DB\hndl-it")
+INTERMEDIATE_D = Path(r"D:\IIWII_DB\intermediate")
+
+GDRIVE_BASE = Path(r"H:\My Drive\IIWII_ARCHIVE")
+ARCHIVE_CODE = GDRIVE_BASE / "hndl-it"
+LOGS_LIVE = GDRIVE_BASE / "logs" / "live"
+LOGS_ARCHIVE = GDRIVE_BASE / "logs" / "archive"
+VERSIONS_DIR = GDRIVE_BASE / "versions"
+
+LOG_FILE = LOGS_LIVE / "backup.log"
 
 # === TIMING ===
-CHECK_INTERVAL = 300  # Check every 5 minutes
-SYNC_COOLDOWN = 900   # Sync every 15 minutes max
+CLONE_INTERVAL = 60       # D: clone every 1 minute
+LOG_ROTATE_DAYS = 7       # Compress logs older than 7 days
+VERSION_INTERVAL = 3600   # Create version snapshot every 1 hour
 
-# === EXCLUSIONS (minimal - we want everything) ===
-EXCLUDE_DIRS = {'chrome_profile', '__pycache__', '.git', 'node_modules', '.venv', 'venv'}
-EXCLUDE_EXTS = {'.tmp', '.pyc'}
+last_clone_hash = None
+last_version_time = 0
 
-last_hash = None
-last_sync = 0
-file_count = 0
-changed_files = []
+def setup_folders():
+    """Create folder structure"""
+    for folder in [CLONE_D, INTERMEDIATE_D, ARCHIVE_CODE, LOGS_LIVE, LOGS_ARCHIVE, VERSIONS_DIR]:
+        folder.mkdir(parents=True, exist_ok=True)
 
 def log(msg):
-    """All logs go STRAIGHT to Google Drive"""
+    """Live log to Google Drive"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = f"[{timestamp}] {msg}"
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
     with open(LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(entry + '\n')
 
-def get_folder_state():
-    """Get folder state with detailed tracking"""
-    global file_count, changed_files
+def get_hash():
     hasher = hashlib.md5()
-    file_count = 0
-    changed_files = []
-    now = time.time()
-    
+    count = 0
     for root, dirs, files in os.walk(SOURCE):
-        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
-        
+        dirs[:] = [d for d in dirs if d not in {'chrome_profile', '__pycache__', '.git', 'node_modules', '.venv'}]
         for fname in sorted(files):
-            if any(fname.endswith(ext) for ext in EXCLUDE_EXTS):
-                continue
-            fpath = Path(root) / fname
-            try:
-                stat = fpath.stat()
-                file_count += 1
-                hasher.update(f"{fpath}:{stat.st_mtime}:{stat.st_size}".encode())
-                
-                # Track ALL files modified in last 5 minutes
-                if now - stat.st_mtime < 300:
-                    rel_path = fpath.relative_to(SOURCE)
-                    changed_files.append(str(rel_path))
-            except:
-                pass
-    
-    return hasher.hexdigest()
+            if not fname.endswith(('.tmp', '.pyc')):
+                fpath = Path(root) / fname
+                try:
+                    stat = fpath.stat()
+                    count += 1
+                    hasher.update(f"{fpath}:{stat.st_mtime}:{stat.st_size}".encode())
+                except:
+                    pass
+    return hasher.hexdigest(), count
 
-def sync():
-    """Sync EVERYTHING to Google Drive"""
-    log(f"SYNC STARTED - {file_count} files tracked")
+def sync_clone():
+    """Real-time sync to D: drive"""
+    cmd = ['robocopy', str(SOURCE), str(CLONE_D), '/MIR',
+           '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+           '/XF', '*.tmp', '*.pyc', '/NP', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1']
+    return subprocess.run(cmd, capture_output=True).returncode <= 7
+
+def sync_archive():
+    """Sync current state to Google Drive archive"""
+    cmd = ['robocopy', str(SOURCE), str(ARCHIVE_CODE), '/MIR',
+           '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+           '/XF', '*.tmp', '*.pyc', '/NP', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1']
+    return subprocess.run(cmd, capture_output=True).returncode <= 7
+
+def create_version_snapshot():
+    """Create timestamped version snapshot"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H")
+    version_dir = VERSIONS_DIR / timestamp
     
-    # Log ALL changed files (thorough)
-    if changed_files:
-        for f in changed_files:
-            log(f"  CHANGED: {f}")
+    if version_dir.exists():
+        return  # Already have this hour's snapshot
     
-    cmd = [
-        'robocopy', str(SOURCE), str(DEST_GDRIVE),
-        '/MIR',
-        '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
-        '/XF', '*.tmp', '*.pyc',
-        '/NP', '/R:1', '/W:1'
-    ]
+    log(f"VERSION SNAPSHOT → {timestamp}")
+    cmd = ['robocopy', str(SOURCE), str(version_dir), '/MIR',
+           '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+           '/XF', '*.tmp', '*.pyc', '/NP', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1']
+    subprocess.run(cmd, capture_output=True)
+
+def rotate_logs():
+    """Compress old logs, clean very old ones"""
+    now = datetime.datetime.now()
     
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    
-    # Log robocopy output for thorough record
-    if result.stdout:
-        for line in result.stdout.strip().split('\n')[-5:]:  # Last 5 lines
-            if line.strip():
-                log(f"  ROBOCOPY: {line.strip()}")
-    
-    if result.returncode <= 7:
-        log(f"SYNC COMPLETE (exit {result.returncode})")
-    else:
-        log(f"SYNC ERROR (exit {result.returncode})")
-        if result.stderr:
-            log(f"  ERROR: {result.stderr[:200]}")
+    for log_file in LOGS_LIVE.glob("*.log"):
+        if log_file == LOG_FILE:
+            continue
+        
+        mtime = datetime.datetime.fromtimestamp(log_file.stat().st_mtime)
+        age_days = (now - mtime).days
+        
+        if age_days > LOG_ROTATE_DAYS:
+            # Compress to archive
+            gz_path = LOGS_ARCHIVE / f"{log_file.stem}_{mtime.strftime('%Y%m%d')}.log.gz"
+            with open(log_file, 'rb') as f_in:
+                with gzip.open(gz_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            log_file.unlink()
+            log(f"ROTATED: {log_file.name} → {gz_path.name}")
 
 def run():
-    global last_hash, last_sync
+    global last_clone_hash, last_version_time
+    
+    setup_folders()
     
     log("=" * 60)
-    log("BACKUP DAEMON STARTED")
+    log("BACKUP SYSTEM STARTED")
     log(f"Source: {SOURCE}")
-    log(f"Archive: {DEST_GDRIVE} (Google Drive 30TB)")
-    log(f"Logs: {LOG_DIR} (Google Drive)")
-    log(f"Check interval: {CHECK_INTERVAL//60} min")
-    log(f"Sync cooldown: {SYNC_COOLDOWN//60} min")
+    log(f"Clone (D:): {CLONE_D}")
+    log(f"Archive: {ARCHIVE_CODE}")
+    log(f"Logs: {LOGS_LIVE}")
+    log(f"Versions: {VERSIONS_DIR}")
     log("=" * 60)
     
-    last_hash = get_folder_state()
-    log(f"Initial scan: {file_count} files")
-    sync()
-    last_sync = time.time()
+    current_hash, count = get_hash()
+    last_clone_hash = current_hash
+    last_version_time = time.time()
+    
+    log(f"Initial: {count} files")
+    sync_clone()
+    sync_archive()
+    create_version_snapshot()
     
     while True:
-        time.sleep(CHECK_INTERVAL)
+        time.sleep(CLONE_INTERVAL)
         
-        current_hash = get_folder_state()
-        time_since_sync = time.time() - last_sync
+        current_hash, count = get_hash()
+        now = time.time()
         
-        if current_hash != last_hash:
-            log(f"CHANGES DETECTED - {len(changed_files)} files modified")
-            if time_since_sync >= SYNC_COOLDOWN:
-                sync()
-                last_hash = current_hash
-                last_sync = time.time()
-            else:
-                remaining = int((SYNC_COOLDOWN - time_since_sync) / 60)
-                log(f"Cooldown active - {remaining} min until next sync")
-        else:
-            log(f"Heartbeat - {file_count} files, no changes")
+        # D: CLONE - Real-time
+        if current_hash != last_clone_hash:
+            if sync_clone():
+                log(f"CLONE → D: ({count} files)")
+                last_clone_hash = current_hash
+        
+        # VERSION SNAPSHOT - Hourly
+        if now - last_version_time >= VERSION_INTERVAL:
+            create_version_snapshot()
+            sync_archive()
+            rotate_logs()
+            last_version_time = now
 
 if __name__ == "__main__":
     sys.stdout = open(os.devnull, 'w')
