@@ -17,10 +17,9 @@ def main():
         print("Creating virtual environment...")
         subprocess.run([sys.executable, "-m", "venv", os.path.join(SCRIPT_DIR, ".venv")])
         
-        print("Installing dependencies...")
+        print("Installing dependencies (lightweight CDP only)...")
         subprocess.run([VENV_PYTHON, "-m", "pip", "install", "-q", 
-                       "fastapi", "uvicorn", "websockets", "aiohttp", "playwright"])
-        subprocess.run([VENV_PYTHON, "-m", "playwright", "install", "chromium"])
+                       "websockets", "aiohttp", "requests"])
     
     # Run server
     print("Starting Browser Agent...")

@@ -1,7 +1,7 @@
 {
     "browser_agent": {
         "port": 8766,
-        "chrome_debug_port": 9223
+        "chrome_debug_port": 9222
     },
     "desktop_agent": {
         "port": 8767,
