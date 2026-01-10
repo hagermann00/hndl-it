@@ -1,0 +1,18 @@
+ANTIGRAVITY VISION BRIDGE
+==================================================
+Cloud AI + Local Vision = $0 API Cost
+==================================================
+Taking screenshot with Win+PrtSc...
+Screenshot: C:\Users\dell3630\Pictures\Screenshots\Screenshot (23).png
+Original: (3840, 1080), Resized: (512, 144)
+Converted to grayscale
+Encoded size: 38,064 chars (vs 1.8M before)
+Sending to LLaVA...
+Response in 3.2s, status: 500
+
+==================================================
+DESKTOP ICONS I SEE:
+==================================================
+Error: model runner has unexpectedly stopped, this may be due to resource limitations or an internal error, check ollama server logs for details
+==================================================
+$0 cloud API cost - 100% local vision!
