@@ -3,36 +3,37 @@ read-it: Standalone Document Reader Module
 Part of the hndl-it ecosystem - Windows Native (PyQt6)
 
 Features:
-- 60x60 floating icon (matches hndl-it)
+- 60x60 floating icon (matches hndl-it size)
 - Click: Expand to reader
 - Hold & Drag: Move
 - TTS read-aloud
+- Different color scheme (cyan/teal)
 """
 
 import sys
 import os
 import re
 import pyttsx3
-import threading
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QSlider, QComboBox, QProgressBar,
-    QFrame, QSystemTrayIcon, QMenu, QFileDialog
+    QFrame, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QThread, QRectF
-from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QFont, QPainterPath
+from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen
 
-# === COLORS (hndl-it lime theme) ===
+# === COLORS (Cyan/Teal theme - distinct from hndl-it lime) ===
 COLORS = {
-    'lime_primary': '#a3ff00',
-    'lime_dim': '#7acc00',
-    'bg_dark': '#1a1a1a',
-    'bg_panel': '#252525',
-    'bg_input': '#2a2a2a',
-    'text_primary': '#e0e0e0',
-    'text_secondary': '#888888',
-    'border': '#333333',
+    'primary': '#00d4ff',      # Cyan
+    'primary_dim': '#00a0cc',
+    'accent': '#00ffcc',       # Teal accent
+    'bg_dark': '#1a1a2e',      # Dark blue-black
+    'bg_panel': '#252540',
+    'bg_input': '#2a2a45',
+    'text_primary': '#e0e8ff',
+    'text_secondary': '#8888aa',
+    'border': '#333355',
 }
 
 
@@ -40,9 +41,7 @@ COLORS = {
 # TTS WORKER THREAD
 # ============================================================================
 class TTSWorker(QThread):
-    """Background TTS thread"""
     progress_updated = pyqtSignal(int, int)
-    chunk_started = pyqtSignal(int)
     finished_speaking = pyqtSignal()
     
     def __init__(self):
@@ -77,12 +76,9 @@ class TTSWorker(QThread):
                 self.msleep(100)
                 continue
             
-            self.chunk_started.emit(self.current_chunk)
             self.progress_updated.emit(self.current_chunk + 1, len(self.chunks))
-            
             self.engine.say(self.chunks[self.current_chunk])
             self.engine.runAndWait()
-            
             self.current_chunk += 1
         
         self.is_playing = False
@@ -100,10 +96,9 @@ class TTSWorker(QThread):
 
 
 # ============================================================================
-# FLOATING ICON (60x60, matches hndl-it)
+# FLOATING ICON (60x60)
 # ============================================================================
 class FloatingIcon(QWidget):
-    """60x60 floating icon - click to expand, drag to move"""
     clicked = pyqtSignal()
     
     def __init__(self):
@@ -126,15 +121,14 @@ class FloatingIcon(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Gradient background
         gradient = QRadialGradient(self.rect().center(), self.width() / 2)
         gradient.setColorAt(0, QColor(COLORS['bg_panel']))
         gradient.setColorAt(1, QColor(COLORS['bg_dark']))
         
         painter.setBrush(QBrush(gradient))
         
-        # Lime border
-        pen = QPen(QColor(COLORS['lime_primary']))
+        # Cyan border
+        pen = QPen(QColor(COLORS['primary']))
         pen.setWidth(3)
         painter.setPen(pen)
         
@@ -142,7 +136,7 @@ class FloatingIcon(QWidget):
         painter.drawEllipse(rect)
         
         # "R" for read-it
-        painter.setPen(QColor(COLORS['lime_primary']))
+        painter.setPen(QColor(COLORS['primary']))
         font = painter.font()
         font.setBold(True)
         font.setPointSize(18)
@@ -164,7 +158,6 @@ class FloatingIcon(QWidget):
     
     def mouseReleaseEvent(self, event):
         if self._dragging and not self._drag_started:
-            # It was a click, not a drag
             self.clicked.emit()
         self._dragging = False
 
@@ -173,7 +166,6 @@ class FloatingIcon(QWidget):
 # READER PANEL (Expanded View)
 # ============================================================================
 class ReaderPanel(QWidget):
-    """Expanded reader panel with TTS controls"""
     closed = pyqtSignal()
     
     def __init__(self):
@@ -190,120 +182,142 @@ class ReaderPanel(QWidget):
         self.tts.finished_speaking.connect(self.on_finished)
         self.tts.progress_updated.connect(self.update_progress)
         
-        self.document_text = ""
+        self.is_expanded = False
         self._drag_pos = QPoint()
         
         self.init_ui()
         self.apply_styles()
     
     def init_ui(self):
-        self.setFixedSize(400, 500)
+        self.setFixedSize(350, 200)  # Compact by default
         
-        # Main container
         self.container = QFrame(self)
         self.container.setObjectName("container")
-        self.container.setGeometry(0, 0, 400, 500)
+        self.container.setGeometry(0, 0, 350, 200)
         
-        layout = QVBoxLayout(self.container)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        self.layout = QVBoxLayout(self.container)
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(8)
         
         # Title bar
         title_bar = QHBoxLayout()
         title = QLabel("read-it")
-        title.setStyleSheet(f"color: {COLORS['lime_primary']}; font-size: 16px; font-weight: bold;")
+        title.setStyleSheet(f"color: {COLORS['primary']}; font-size: 14px; font-weight: bold;")
         title_bar.addWidget(title)
         title_bar.addStretch()
+        
+        # Expand toggle
+        self.expand_btn = QPushButton("◀")
+        self.expand_btn.setFixedSize(24, 24)
+        self.expand_btn.clicked.connect(self.toggle_expand)
+        title_bar.addWidget(self.expand_btn)
         
         close_btn = QPushButton("×")
         close_btn.setFixedSize(24, 24)
         close_btn.clicked.connect(self.collapse)
         title_bar.addWidget(close_btn)
-        layout.addLayout(title_bar)
+        self.layout.addLayout(title_bar)
         
-        # Text area
+        # Text area (always visible)
         self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("Paste or drop text here...")
-        layout.addWidget(self.text_edit, 1)
+        self.text_edit.setPlaceholderText("Drop text or file here...")
+        self.text_edit.setFixedHeight(80)
+        self.layout.addWidget(self.text_edit)
         
         # Progress bar
         self.progress = QProgressBar()
         self.progress.setMaximum(100)
         self.progress.setValue(0)
-        self.progress.setFixedHeight(6)
-        layout.addWidget(self.progress)
+        self.progress.setFixedHeight(4)
+        self.layout.addWidget(self.progress)
         
-        # Controls
+        # MINIMAL CONTROLS (always visible)
         controls = QHBoxLayout()
         
         self.play_btn = QPushButton("▶")
-        self.play_btn.setFixedSize(40, 40)
+        self.play_btn.setFixedSize(36, 36)
         self.play_btn.clicked.connect(self.toggle_play)
         controls.addWidget(self.play_btn)
         
         self.stop_btn = QPushButton("⬛")
-        self.stop_btn.setFixedSize(40, 40)
+        self.stop_btn.setFixedSize(36, 36)
         self.stop_btn.clicked.connect(self.stop_reading)
         controls.addWidget(self.stop_btn)
         
         controls.addStretch()
         
-        # Speed slider
-        speed_label = QLabel("Speed:")
-        controls.addWidget(speed_label)
-        
+        # Speed (compact)
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setRange(100, 300)
         self.speed_slider.setValue(175)
-        self.speed_slider.setFixedWidth(100)
+        self.speed_slider.setFixedWidth(80)
         self.speed_slider.valueChanged.connect(lambda v: self.tts.set_rate(v))
         controls.addWidget(self.speed_slider)
         
-        layout.addLayout(controls)
+        self.layout.addLayout(controls)
+        
+        # EXPANDED CONTROLS (hidden by default)
+        self.expanded_frame = QFrame()
+        self.expanded_frame.hide()
+        exp_layout = QVBoxLayout(self.expanded_frame)
+        exp_layout.setContentsMargins(0, 0, 0, 0)
+        exp_layout.setSpacing(6)
         
         # Voice selector
-        voice_layout = QHBoxLayout()
+        voice_row = QHBoxLayout()
         voice_label = QLabel("Voice:")
-        voice_layout.addWidget(voice_label)
-        
+        voice_row.addWidget(voice_label)
         self.voice_combo = QComboBox()
         self.load_voices()
         self.voice_combo.currentIndexChanged.connect(self.change_voice)
-        voice_layout.addWidget(self.voice_combo, 1)
+        voice_row.addWidget(self.voice_combo, 1)
+        exp_layout.addLayout(voice_row)
         
-        layout.addLayout(voice_layout)
-        
-        # Bottom buttons
-        bottom = QHBoxLayout()
-        
+        # Open/Paste buttons
+        btn_row = QHBoxLayout()
         open_btn = QPushButton("📂 Open")
         open_btn.clicked.connect(self.open_file)
-        bottom.addWidget(open_btn)
+        btn_row.addWidget(open_btn)
         
         paste_btn = QPushButton("📋 Paste")
         paste_btn.clicked.connect(self.paste_clipboard)
-        bottom.addWidget(paste_btn)
+        btn_row.addWidget(paste_btn)
+        exp_layout.addLayout(btn_row)
         
-        layout.addLayout(bottom)
+        self.layout.addWidget(self.expanded_frame)
+    
+    def toggle_expand(self):
+        if self.is_expanded:
+            self.expanded_frame.hide()
+            self.setFixedSize(350, 200)
+            self.container.setGeometry(0, 0, 350, 200)
+            self.expand_btn.setText("◀")
+            self.is_expanded = False
+        else:
+            self.expanded_frame.show()
+            self.setFixedSize(350, 300)
+            self.container.setGeometry(0, 0, 350, 300)
+            self.expand_btn.setText("▼")
+            self.is_expanded = True
     
     def apply_styles(self):
         self.container.setStyleSheet(f"""
             QFrame#container {{
                 background-color: {COLORS['bg_dark']};
-                border: 2px solid {COLORS['lime_primary']};
+                border: 2px solid {COLORS['primary']};
                 border-radius: 12px;
             }}
             QLabel {{ color: {COLORS['text_primary']}; }}
             QPushButton {{
                 background-color: {COLORS['bg_panel']};
-                color: {COLORS['lime_primary']};
-                border: 1px solid {COLORS['lime_dim']};
+                color: {COLORS['primary']};
+                border: 1px solid {COLORS['primary_dim']};
                 border-radius: 6px;
-                padding: 6px 12px;
+                padding: 4px 10px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {COLORS['lime_dim']};
+                background-color: {COLORS['primary_dim']};
                 color: {COLORS['bg_dark']};
             }}
             QTextEdit {{
@@ -311,34 +325,34 @@ class ReaderPanel(QWidget):
                 color: {COLORS['text_primary']};
                 border: 1px solid {COLORS['border']};
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px;
             }}
             QComboBox {{
                 background-color: {COLORS['bg_input']};
-                color: {COLORS['lime_primary']};
+                color: {COLORS['primary']};
                 border: 1px solid {COLORS['border']};
                 border-radius: 5px;
-                padding: 5px;
+                padding: 4px;
             }}
             QSlider::groove:horizontal {{
                 background: {COLORS['border']};
-                height: 6px;
-                border-radius: 3px;
+                height: 4px;
+                border-radius: 2px;
             }}
             QSlider::handle:horizontal {{
-                background: {COLORS['lime_primary']};
-                width: 16px;
+                background: {COLORS['primary']};
+                width: 14px;
                 margin: -5px 0;
-                border-radius: 8px;
+                border-radius: 7px;
             }}
             QProgressBar {{
                 background: {COLORS['border']};
                 border: none;
-                border-radius: 3px;
+                border-radius: 2px;
             }}
             QProgressBar::chunk {{
-                background: {COLORS['lime_primary']};
-                border-radius: 3px;
+                background: {COLORS['primary']};
+                border-radius: 2px;
             }}
         """)
     
@@ -368,7 +382,6 @@ class ReaderPanel(QWidget):
         if not text.strip():
             return
         
-        self.document_text = text
         self.tts.set_text(text)
         self.tts.set_rate(self.speed_slider.value())
         self.play_btn.setText("⏸")
@@ -388,16 +401,13 @@ class ReaderPanel(QWidget):
             self.progress.setValue(int((current / total) * 100))
     
     def open_file(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Open File", "", "Text Files (*.txt);;All Files (*)"
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "Text (*.txt);;All (*)")
         if path:
             with open(path, 'r', encoding='utf-8') as f:
                 self.text_edit.setText(f.read())
     
     def paste_clipboard(self):
-        clipboard = QApplication.clipboard()
-        self.text_edit.setText(clipboard.text())
+        self.text_edit.setText(QApplication.clipboard().text())
     
     def collapse(self):
         self.hide()
@@ -406,12 +416,10 @@ class ReaderPanel(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
     
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
-            event.accept()
     
     def dragEnterEvent(self, event):
         if event.mimeData().hasText() or event.mimeData().hasUrls():
@@ -433,21 +441,16 @@ class ReaderPanel(QWidget):
 # MAIN APP
 # ============================================================================
 class ReadItApp:
-    """read-it application controller"""
-    
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         
-        # Floating icon
         self.icon = FloatingIcon()
         self.icon.clicked.connect(self.toggle_panel)
         
-        # Reader panel
         self.panel = ReaderPanel()
         self.panel.closed.connect(lambda: self.icon.show())
         
-        # Position icon bottom-right
         screen = self.app.primaryScreen().availableGeometry()
         self.icon.move(screen.width() - 100, screen.height() - 100)
     
@@ -456,9 +459,8 @@ class ReadItApp:
             self.panel.hide()
             self.icon.show()
         else:
-            # Position panel near icon
             icon_pos = self.icon.pos()
-            self.panel.move(icon_pos.x() - 350, icon_pos.y() - 450)
+            self.panel.move(icon_pos.x() - 300, icon_pos.y() - 150)
             self.panel.show()
             self.icon.hide()
     
