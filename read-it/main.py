@@ -205,30 +205,51 @@ class FloatingIcon(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # QRadialGradient needs float center coordinates
-        cx = self.width() / 2.0
-        cy = self.height() / 2.0
-        gradient = QRadialGradient(cx, cy, self.width() / 2.0)
-        gradient.setColorAt(0, QColor(COLORS['bg_panel']))
-        gradient.setColorAt(1, QColor(COLORS['bg_dark']))
+        from PyQt6.QtGui import QPixmap, QPainterPath
         
-        painter.setBrush(QBrush(gradient))
+        # Try to load custom icon
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
         
-        # Cyan border
-        pen = QPen(QColor(COLORS['primary']))
-        pen.setWidth(3)
-        painter.setPen(pen)
-        
-        rect = QRectF(3, 3, self.width()-6, self.height()-6)
-        painter.drawEllipse(rect)
-        
-        # "R" for read-it
-        painter.setPen(QColor(COLORS['primary']))
-        font = painter.font()
-        font.setBold(True)
-        font.setPointSize(18)
-        painter.setFont(font)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "R")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path)
+            
+            # Draw circular clipped icon
+            path = QPainterPath()
+            path.addEllipse(0.0, 0.0, float(self.width()), float(self.height()))
+            painter.setClipPath(path)
+            
+            # Scale and draw
+            painter.drawPixmap(self.rect(), pixmap)
+            
+            # Draw border
+            painter.setClipping(False)
+            pen = QPen(QColor(COLORS['primary']))
+            pen.setWidth(3)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(pen)
+            painter.drawEllipse(3, 3, self.width()-6, self.height()-6)
+        else:
+            # Fallback gradient
+            cx = self.width() / 2.0
+            cy = self.height() / 2.0
+            gradient = QRadialGradient(cx, cy, self.width() / 2.0)
+            gradient.setColorAt(0, QColor(COLORS['bg_panel']))
+            gradient.setColorAt(1, QColor(COLORS['bg_dark']))
+            
+            painter.setBrush(QBrush(gradient))
+            pen = QPen(QColor(COLORS['primary']))
+            pen.setWidth(3)
+            painter.setPen(pen)
+            
+            rect = QRectF(3, 3, self.width()-6, self.height()-6)
+            painter.drawEllipse(rect)
+            
+            painter.setPen(QColor(COLORS['primary']))
+            font = painter.font()
+            font.setBold(True)
+            font.setPointSize(18)
+            painter.setFont(font)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "R")
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
