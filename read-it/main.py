@@ -121,7 +121,10 @@ class FloatingIcon(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        gradient = QRadialGradient(self.rect().center(), self.width() / 2)
+        # QRadialGradient needs float center coordinates
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        gradient = QRadialGradient(cx, cy, self.width() / 2.0)
         gradient.setColorAt(0, QColor(COLORS['bg_panel']))
         gradient.setColorAt(1, QColor(COLORS['bg_dark']))
         
