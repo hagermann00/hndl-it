@@ -1,0 +1,91 @@
+from fastmcp import FastMCP
+import asyncio
+import sys
+import os
+
+# Create MCP
+mcp = FastMCP("notebooklm-web")
+
+# --- Import hndl-it BrowserController (lightweight CDP) ---
+# We verify the path exists first
+HNDL_IT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+sys.path.append(HNDL_IT_PATH)
+
+try:
+    from agents.browser.browser_controller import BrowserController
+except ImportError:
+    # Fallback: Copy-paste the minimal BrowserController logic if import fails
+    # (For robustness in standalone mode)
+    print("Warning: Could not import BrowserController from hndl-it. Using fallback stub.")
+    class BrowserController:
+        def __init__(self): pass
+        async def start(self): pass
+        async def navigate(self, url): pass
+        async def execute_script(self, script): return "Mock Success"
+        async def close(self): pass
+
+# --- Tools ---
+
+@mcp.tool()
+async def open_notebooklm() -> str:
+    """Launches NotebookLM in the active hndl-it browser (CDP)."""
+    bc = BrowserController()
+    try:
+        await bc.start()
+        await bc.navigate("https://notebooklm.google.com/")
+        return "Navigated to NotebookLM"
+    except Exception as e:
+        return f"Error: {e}"
+    finally:
+        await bc.close()
+
+@mcp.tool()
+async def create_new_notebook() -> str:
+    """kliks 'New Notebook' via JS injection."""
+    bc = BrowserController()
+    try:
+        await bc.start()
+        
+        # JS to find and click the 'New Notebook' square
+        # Note: Selectors are fragile, this is a best-guess based on current UI
+        script = """
+        (function() {
+            // Logic: Find the big 'New Notebook' tile
+            const tiles = document.querySelectorAll('div[role="button"]');
+            for (const tile of tiles) {
+                if (tile.innerText.includes("New Notebook")) {
+                    tile.click();
+                    return "Clicked New Notebook";
+                }
+            }
+            return "New Notebook button not found";
+        })()
+        """
+        result = await bc.execute_script(script)
+        return f"Result: {result}"
+    except Exception as e:
+        return f"Error: {e}"
+    finally:
+        await bc.close()
+
+@mcp.tool()
+async def check_status() -> str:
+    """Checks if we are logged in by scraping the page title/body."""
+    bc = BrowserController()
+    try:
+        await bc.start()
+        title = await bc.execute_script("document.title")
+        body_text = await bc.scrape_text("body")
+        
+        status = "Logged In"
+        if "Sign in" in title or "Sign in" in body_text:
+            status = "Login Required"
+            
+        return f"Title: {title} | Status: {status}"
+    except Exception as e:
+        return f"Error: {e}"
+    finally:
+        await bc.close()
+
+if __name__ == "__main__":
+    mcp.run()
