@@ -461,7 +461,9 @@ class FloatingIcon(QWidget):
         
         if action == restart_action:
             import subprocess
-            subprocess.Popen([sys.executable, __file__])
+            script_path = os.path.abspath(__file__)
+            subprocess.Popen([sys.executable, script_path], 
+                           creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
             QApplication.quit()
         elif action == quit_action:
             QApplication.quit()
