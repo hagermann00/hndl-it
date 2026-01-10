@@ -132,21 +132,56 @@ class BrowserController:
                     raise RuntimeError(f"CDP Error: {resp['error']['message']}")
                 return resp.get("result", {})
 
-    async def navigate(self, url: str):
-        """Navigates to URL."""
+    async def navigate(self, url: str, new_tab: bool = False):
+        """Navigates to URL. If new_tab=True, opens in new tab."""
         # Domain Normalization
         if "." not in url and "localhost" not in url:
             url = f"{url}.com"
         if not url.startswith("http"):
             url = f"https://{url}"
-            
-        logger.info(f"Navigating to {url}...")
-        await self._send_cdp("Page.navigate", {"url": url})
-        # Wait for load? Pure CDP Page.loadEventFired is an event, not a response.
-        # For now, we trust the browser triggers navigation.
-        # Adding a small sleep or polling ReadyState is common practice in simple CDP clients.
-        # Let's try to wait for Runtime.evaluate confirming document.readyState == 'complete'
-        await self._wait_for_load()
+        
+        if new_tab:
+            # Create new tab and switch to it
+            await self.open_new_tab(url)
+        else:
+            logger.info(f"Navigating to {url}...")
+            await self._send_cdp("Page.navigate", {"url": url})
+            await self._wait_for_load()
+    
+    async def open_new_tab(self, url: str = "about:blank"):
+        """Opens a new tab and switches to it."""
+        logger.info(f"Opening new tab: {url}")
+        
+        # Use Target.createTarget to create new tab
+        result = await self._send_cdp("Target.createTarget", {"url": url})
+        target_id = result.get("targetId")
+        
+        if target_id:
+            # Get the new tab's websocket URL and connect to it
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.cdp_http_url}/json") as resp:
+                    targets = await resp.json()
+                    for t in targets:
+                        if t.get("id") == target_id:
+                            new_ws_url = t.get("webSocketDebuggerUrl")
+                            if new_ws_url:
+                                # Close old connection, open new
+                                if self.websocket:
+                                    await self.websocket.close()
+                                self.ws_url = new_ws_url
+                                self.websocket = await websockets.connect(new_ws_url)
+                                logger.info(f"Switched to new tab: {target_id}")
+                                await self._wait_for_load()
+                                return
+        
+        logger.warning("Could not switch to new tab")
+    
+    async def get_tabs(self) -> List[Dict]:
+        """Get list of all open tabs."""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.cdp_http_url}/json") as resp:
+                targets = await resp.json()
+                return [t for t in targets if t.get("type") == "page"]
 
     async def _wait_for_load(self, timeout: int = 10):
         """Polls readyState."""
