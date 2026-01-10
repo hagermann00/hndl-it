@@ -748,7 +748,7 @@ class ReaderPanel(QWidget):
 # MAIN APP
 # ============================================================================
 class ReadItApp:
-    def __init__(self):
+    def __init__(self, start_y=None):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         
@@ -778,7 +778,31 @@ class ReadItApp:
         
         # Position icon
         screen = self.app.primaryScreen().availableGeometry()
-        self.icon.move(screen.width() - 100, screen.height() - 780)
+        if start_y is not None:
+            self.icon.move(screen.width() - 80, start_y)
+        else:
+            self.icon.move(screen.width() - 100, screen.height() - 780)
+            
+        # IPC Listener
+        from PyQt6.QtCore import QTimer
+        self.ipc_timer = QTimer()
+        self.ipc_timer.timeout.connect(self.check_ipc)
+        self.ipc_timer.start(1000)
+
+    def check_ipc(self):
+        try:
+            import sys
+            import os
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if project_root not in sys.path:
+                sys.path.append(project_root)
+            
+            from shared.ipc import check_mailbox
+            action, payload = check_mailbox("read")
+            if action == "read_text":
+                self.read_text(payload.get("text"))
+        except:
+            pass
     
     def toggle_panel(self):
         if self.panel.isVisible():
@@ -840,7 +864,12 @@ class ReadItApp:
 
 
 def main():
-    app = ReadItApp()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--y", type=int, default=None)
+    args, _ = parser.parse_known_args()
+    
+    app = ReadItApp(start_y=args.y)
     sys.exit(app.run())
 
 

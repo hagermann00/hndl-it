@@ -469,6 +469,32 @@ class TodoItApp:
         # Wiring
         self.quick_input.submitted.connect(self.panel.add_todo)
         self.quick_input.expand_requested.connect(self.show_panel)
+        
+        # IPC Listener
+        from PyQt6.QtCore import QTimer
+        self.ipc_timer = QTimer()
+        self.ipc_timer.timeout.connect(self.check_ipc)
+        self.ipc_timer.start(1000)
+        
+    def check_ipc(self):
+        try:
+            import sys
+            import os
+            # Ensure shared is importable if running standalone
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if project_root not in sys.path:
+                sys.path.append(project_root)
+                
+            from shared.ipc import check_mailbox
+            action, payload = check_mailbox("todo")
+            if action:
+                if action == "add_todo":
+                    text = payload.get("text")
+                    if text:
+                        self.panel.add_todo(text)
+                        self.panel.show_animated()
+        except ImportError:
+            pass # Shared not available?
     
     def show_quick_input(self, x, y):
         """Show quick input at position."""
@@ -485,11 +511,35 @@ class TodoItApp:
 
 
 # Standalone test
+# Standalone test
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--y", type=int, default=450)
+    args, _ = parser.parse_known_args()
+
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     
     todo_app = TodoItApp()
-    todo_app.panel.show()
-    todo_app.panel.move(100, 100)
+    
+    # Floating Icon
+    try:
+        from overlay import TodoOverlay
+        icon = TodoOverlay()
+        
+        # Position
+        screen_geo = app.primaryScreen().availableGeometry()
+        x = screen_geo.width() - 80
+        icon.move(x, args.y)
+        icon.show()
+        
+        # Connect
+        icon.clicked.connect(todo_app.panel.show_animated)
+        icon.double_clicked.connect(todo_app.panel.show_animated)
+        
+    except ImportError:
+        # Fallback if overlay not found
+        todo_app.panel.show()
     
     sys.exit(app.exec())

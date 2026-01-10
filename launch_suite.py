@@ -127,8 +127,8 @@ def launch_all():
     
     screen_geo = app.primaryScreen().availableGeometry()
     RIGHT_X = screen_geo.width() - 80
-    START_Y = 150
-    SPACING = 70
+    START_Y = 290
+    SPACING = 80
     
     modules = []
     
@@ -149,12 +149,45 @@ def launch_all():
         hndl_icon.move(RIGHT_X, START_Y)
         hndl_icon.show()
         
+        # Context Menu for Restart/Close
+        hndl_icon.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        
+        def restart_suite():
+            logger.info("♻️ Restarting Suite...")
+            import sys
+            import os
+            # Relaunch current script
+            os.execl(sys.executable, sys.executable, *sys.argv)
+            
+        def show_context_menu(pos):
+            menu = QMenu()
+            
+            restart_action = QAction("♻️ Restart Suite", hndl_icon)
+            restart_action.triggered.connect(restart_suite)
+            
+            close_action = QAction("❌ Close Suite", hndl_icon)
+            close_action.triggered.connect(app.quit)
+            
+            menu.addAction(restart_action)
+            menu.addSeparator()
+            menu.addAction(close_action)
+            
+            menu.exec(hndl_icon.mapToGlobal(pos))
+            
+        hndl_icon.customContextMenuRequested.connect(show_context_menu)
+        
         def toggle_hndl_input():
             if tray.quick_dialog.isVisible():
                 tray.quick_dialog.hide()
             else:
                 geo = hndl_icon.geometry()
-                tray.quick_dialog.move(geo.left() - tray.quick_dialog.width() - 10, geo.top())
+                x = geo.left() - tray.quick_dialog.width() - 10
+                y = geo.top() - 150  # Up and to the left
+                
+                if x < 0:
+                    x = geo.right() + 10
+                
+                tray.quick_dialog.move(x, y)
                 tray.quick_dialog.show()
                 tray.quick_dialog.activateWindow()
                 tray.quick_dialog.input.setFocus()
@@ -262,10 +295,21 @@ def launch_all():
         import traceback
         traceback.print_exc()
     
-    # ========== 4. Voice Input (Global Hotkey) ==========
+    # ========== 4. Voice Input (Global Hotkey + Icon) ==========
     try:
-        from shared.voice_input import init_voice_input, VOICE_AVAILABLE
+        from shared.voice_input import init_voice_input, VOICE_AVAILABLE, get_voice_input
         from shared.voice_router import parse_voice_command, VoiceTarget
+        
+        # Create Icon First
+        voice_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'voice_it_icon.png'),
+            fallback_letter="V",
+            border_color="#ff00ff"  # Magenta
+        )
+        voice_icon.move(RIGHT_X, START_Y + SPACING * 3)
+        voice_icon.show()
+        
+        modules.append(("voice-it", voice_icon))
         
         if VOICE_AVAILABLE:
             def handle_voice(text):
@@ -274,21 +318,56 @@ def launch_all():
                 
                 if result["target"] == VoiceTarget.TODO_IT:
                     try:
-                        todo_app.panel.add_todo(result.get('todo_text', text))
-                        todo_app.panel.show()
-                    except:
-                        pass
+                        # todo_app is captured from enclosing scope
+                        if todo_app:
+                            todo_app.panel.add_todo(result.get('todo_text', text))
+                            todo_app.panel.show()
+                    except Exception as e:
+                        logger.error(f"Failed to route to todo-it: {e}")
                 else:
                     try:
-                        tray.quick_dialog.input.setText(text)
-                        toggle_hndl_input()
-                    except:
-                        pass
+                        if tray:
+                            tray.quick_dialog.input.setText(text)
+                            toggle_hndl_input()
+                    except Exception as e:
+                        logger.error(f"Failed to route to hndl-it: {e}")
             
-            init_voice_input(handle_voice, lambda x: logger.info(f"🎤 Listening: {x}"))
-            logger.info("✅ Voice input ready (Win+Alt)")
+            def handle_listening(is_listening):
+                logger.info(f"🎤 Listening state: {is_listening}")
+                # Visual feedback on icon
+                if is_listening:
+                    voice_icon.border_color = "#ff0000"  # Red when recording
+                    voice_icon.update()
+                else:
+                    voice_icon.border_color = "#ff00ff"  # Back to Magenta
+                    voice_icon.update()
+            
+            vi = init_voice_input(handle_voice, handle_listening)
+            
+            # Click to toggle listening
+            def toggle_voice():
+                if vi.is_listening:
+                    vi.cancel_listening()
+                else:
+                    vi._on_hotkey_pressed()
+            
+            voice_icon.clicked.connect(toggle_voice)
+            
+            # --- Bonus Hotkeys ---
+            try:
+                import keyboard
+                # "The other two are for native dictation" -> Simulating Win+H
+                keyboard.add_hotkey("ctrl+windows+alt", lambda: keyboard.send("windows+h"))
+                logger.info("✅ Native Dictation shortcut (Ctrl+Win+Alt -> Win+H) active")
+            except Exception as e:
+                logger.warning(f"Failed to register native hotkeys: {e}")
+
+            logger.info("✅ Voice input ready (Ctrl+Shift+Win or Click Icon)")
+        else:
+            logger.warning("⚠️ Voice input unavailable")
+            
     except Exception as e:
-        logger.warning(f"⚠️ Voice input unavailable: {e}")
+        logger.warning(f"⚠️ Voice input setup failed: {e}")
     
     # ========== Summary ==========
     logger.info(f"🎯 Launched {len(modules)} modules:")

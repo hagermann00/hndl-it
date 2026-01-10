@@ -51,10 +51,15 @@ logging.basicConfig(
 logger = logging.getLogger("hndl-it.floater")
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--y", type=int, default=170)
+    args, _ = parser.parse_known_args()
+
     logger.info("Starting hndl-it Floater UI...")
     
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False) # Important for tray apps
+    app.setQuitOnLastWindowClosed(False)
     
     # Console
     console = ConsoleWindow()
@@ -64,17 +69,16 @@ def main():
     gui_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logging.getLogger().addHandler(gui_handler)
     
-    # 1. Tray Icon (Logic Hub + Backup UI)
+    # 1. Tray Icon
     tray = FloaterTray(app)
-    # Give tray access to console for its menu
     tray.console_window = console
     
-    # 2. Overlay Widget (The "Dock")
+    # 2. Overlay Widget
     overlay = OverlayWidget()
     
-    # Initial Position: Top-Rightish
+    # Position
     screen_geo = app.primaryScreen().availableGeometry()
-    overlay.move(screen_geo.width() - 100, 170)
+    overlay.move(screen_geo.width() - 80, args.y)
     overlay.show()
     
     # Wiring
@@ -82,13 +86,11 @@ def main():
         if tray.quick_dialog.isVisible():
             tray.quick_dialog.hide()
         else:
-            # Position near overlay
             geo = overlay.geometry()
-            # Place to left of overlay
+            # Up and to the left
             x = geo.left() - tray.quick_dialog.width() - 10
-            y = geo.top() + 200
+            y = geo.top() - 150
             
-            # Clamp logic (simple)
             if x < 0: x = geo.right() + 10
             
             tray.quick_dialog.move(x, y)
@@ -100,69 +102,28 @@ def main():
     overlay.clicked.connect(toggle_input)
     overlay.double_clicked.connect(lambda: console.show() or console.raise_() or console.activateWindow())
     
-    # 3. Voice Input System (Win+Alt hotkey)
-    todo_app = None
+    # IPC Listener
+    from PyQt6.QtCore import QTimer
+    ipc_timer = QTimer()
     
-    def handle_voice_result(text: str):
-        """Route voice command to appropriate module."""
-        nonlocal todo_app
-        logger.info(f"Voice input: {text}")
-        
-        if VOICE_AVAILABLE:
-            result = parse_voice_command(text)
-            target = result["target"]
-            
-            if target == VoiceTarget.TODO_IT:
-                # Route to todo-it
-                logger.info(f"Routing to todo-it: {result.get('todo_text', text)}")
-                if todo_app is None:
-                    try:
-                        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'todo-it'))
-                        from main import TodoItApp
-                        todo_app = TodoItApp()
-                    except Exception as e:
-                        logger.error(f"Failed to load todo-it: {e}")
-                
-                if todo_app:
-                    todo_app.panel.add_todo(result.get('todo_text', text))
-                    todo_app.panel.show()
-                    
-            elif target == VoiceTarget.READ_IT:
-                # Route to read-it (future)
-                logger.info(f"Would route to read-it: {result['command']}")
-                
-            elif target == VoiceTarget.BROWSER:
-                # Route to browser agent
-                logger.info(f"Would route to browser: {result['command']}")
-                tray.quick_dialog.input.setText(result['command'])
-                toggle_input()
-                
-            else:
-                # Default: show in hndl-it input
-                tray.quick_dialog.input.setText(text)
-                toggle_input()
-        else:
-            # No routing, just put in input
-            tray.quick_dialog.input.setText(text)
-            toggle_input()
-    
-    def handle_listening_state(is_listening: bool):
-        """Update UI when listening state changes."""
-        if is_listening:
-            logger.info("🎤 Listening...")
-            # Could add visual feedback on overlay here
-        else:
-            logger.info("🔇 Stopped listening")
-    
-    # Initialize voice input
-    if VOICE_AVAILABLE:
+    def check_ipc_handler():
         try:
-            voice = init_voice_input(handle_voice_result, handle_listening_state)
-            logger.info("Voice input ready. Press WIN+ALT to speak.")
-        except Exception as e:
-            logger.warning(f"Voice input failed to initialize: {e}")
+            from shared.ipc import check_mailbox
+            action, payload = check_mailbox("hndl")
+            if action:
+                if action == "input":
+                    text = payload.get("text")
+                    # Set text and show
+                    tray.quick_dialog.input.setText(text)
+                    if not tray.quick_dialog.isVisible():
+                         toggle_input()
+        except Exception:
+            pass
+
+    ipc_timer.timeout.connect(check_ipc_handler)
+    ipc_timer.start(1000)
     
-    logger.info("Floater UI initialized. Overlay and Tray active.")
+    logger.info("Floater UI initialized. Listening on IPC 'hndl'.")
     sys.exit(app.exec())
 
 if __name__ == "__main__":

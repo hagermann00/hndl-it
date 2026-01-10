@@ -124,3 +124,14 @@ class OverlayWidget(QWidget):
     def mouseDoubleClickEvent(self, event):
         # Override the single click? 
         self.double_clicked.emit()
+
+    def contextMenuEvent(self, event):
+        from PyQt6.QtWidgets import QMenu, QApplication
+        from PyQt6.QtGui import QAction
+        menu = QMenu(self)
+        
+        close_action = QAction("Close", self)
+        close_action.triggered.connect(QApplication.instance().quit)
+        menu.addAction(close_action)
+        
+        menu.exec(event.globalPos())

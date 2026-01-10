@@ -66,7 +66,9 @@ class QuickDialog(QDialog):
         self._drag_pos = QPoint()
         
         # Apply initial mode
-        self.apply_mode("full")
+        # Apply initial mode - Start specific
+        self.apply_mode("bar")
+        self.collapse_to_input()
 
     def _setup_styles(self):
         self.setStyleSheet("""
@@ -431,6 +433,7 @@ class QuickDialog(QDialog):
     def submit(self):
         text = self.input.text()
         if text:
+            self.expand_to_log()  # Auto-expand on submit
             self.add_log(f"> {text}")
             self.command_submitted.emit(text)
             self.input.clear()
@@ -439,6 +442,20 @@ class QuickDialog(QDialog):
         self.log_area.append(message)
         sb = self.log_area.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def collapse_to_input(self):
+        """Show only input field."""
+        self.log_area.hide()
+        self.status_label.hide()
+        # Keep width, shrink height
+        self.setFixedSize(self.width(), 75) 
+    
+    def expand_to_log(self):
+        """Show full log area."""
+        self.log_area.show()
+        self.status_label.show()
+        # Keep width, grow height
+        self.setFixedSize(self.width(), 320)
 
     def toggle_ghost_mode(self):
         """Toggle ghost mode: transparent + click-through vs normal."""

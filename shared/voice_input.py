@@ -20,7 +20,7 @@ except ImportError:
 class VoiceInput:
     """Global voice input handler with hotkey trigger."""
     
-    HOTKEY = "win+alt"  # hndl-it voice trigger
+    HOTKEY = "ctrl+shift+windows"  # hndl-it voice trigger
     SILENCE_TIMEOUT = 2.0  # seconds of silence to auto-submit
     PHRASE_TIMEOUT = 10.0  # max recording time
     
@@ -80,6 +80,16 @@ class VoiceInput:
         thread = threading.Thread(target=self._listen_and_transcribe, daemon=True)
         thread.start()
     
+    def cancel_listening(self):
+        """Force cancel current listening session."""
+        if self.is_listening:
+            print("🚫 Canceling voice input...")
+            # We can't easily interrupt recognizer.listen(), but we can ignore result
+            # and reset state immediately.
+            self.is_listening = False
+            self.on_listening(False)
+            # In a real async implementation we would kill the stream
+    
     def _listen_and_transcribe(self):
         """Capture audio and transcribe."""
         if not VOICE_AVAILABLE:
@@ -92,8 +102,14 @@ class VoiceInput:
             with sr.Microphone() as source:
                 print("🎤 Listening...")
                 
+                # Check for cancel before starting
+                if not self.is_listening: return
+                
                 # Quick ambient adjustment
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.3)
+                
+                # Check for cancel
+                if not self.is_listening: return
                 
                 # Listen with timeout
                 try:
@@ -104,6 +120,11 @@ class VoiceInput:
                     )
                 except sr.WaitTimeoutError:
                     print("No speech detected")
+                    return
+                
+                # Check for cancel (user clicked off while we were recording)
+                if not self.is_listening:
+                    print("Input canceled, ignoring audio")
                     return
                 
                 print("Processing...")
