@@ -63,6 +63,12 @@ class Orchestrator:
             (r"^(recall|remember|what did i|history of) (.+)", "retrieval", "search"),
             (r"^(save|store|remember this) (.+)", "retrieval", "store"),
             
+            # Brain - Questions that need LLM answers
+            (r"^(what is|what's|whats) (.+)", "brain", "answer"),
+            (r"^(who is|who's|whos) (.+)", "brain", "answer"),
+            (r"^(why|how|when|where) (.+)", "brain", "answer"),
+            (r"^(explain|tell me about|describe) (.+)", "brain", "answer"),
+            
             # System Commands
             (r"^(quit|exit|close|shutdown)", "system", "quit"),
             (r"^(restart|reload)", "system", "restart"),

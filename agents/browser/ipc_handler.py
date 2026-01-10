@@ -63,6 +63,13 @@ def main():
                         site = payload.get("modifier", "")
                         url = f"https://www.google.com/search?q=site:{site}+{query}"
                         controller.navigate(url)
+                    
+                    elif action == "query":
+                        # Generic query - search Google
+                        query = payload.get("key") or payload.get("query") or payload.get("subject") or payload.get("input", "")
+                        url = f"https://www.google.com/search?q={query}"
+                        controller.navigate(url)
+                        logger.info(f"✅ Queried: {query}")
                         
                     elif action == "close":
                         if controller:

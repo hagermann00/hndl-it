@@ -83,6 +83,11 @@ class FloaterTray(QSystemTrayIcon):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(500, lambda: self.on_activated(QSystemTrayIcon.ActivationReason.Trigger))
         
+        # IPC Response Listener - polls for responses from agents
+        self.ipc_timer = QTimer()
+        self.ipc_timer.timeout.connect(self.check_ipc_responses)
+        self.ipc_timer.start(500)  # Check every 500ms
+        
     def on_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             # Single Click - Toggle Quick Dialog
@@ -228,3 +233,29 @@ class FloaterTray(QSystemTrayIcon):
         """Handle per-agent connection status updates."""
         self.quick_dialog.set_agent_status(agent_name, connected)
 
+    def check_ipc_responses(self):
+        """Poll for IPC responses from agents (like Brain answers)."""
+        try:
+            from shared.ipc import check_mailbox
+            
+            action, payload = check_mailbox("floater")
+            
+            if action and payload:
+                if action == "display":
+                    msg_type = payload.get("type", "info")
+                    
+                    if msg_type == "answer":
+                        question = payload.get("question", "")
+                        answer = payload.get("answer", "")
+                        self.quick_dialog.add_log(f"❓ {question}")
+                        self.quick_dialog.add_log(f"💡 {answer}")
+                        
+                    elif msg_type == "error":
+                        message = payload.get("message", "Unknown error")
+                        self.quick_dialog.add_log(f"❌ {message}")
+                        
+                    else:
+                        self.quick_dialog.add_log(f"📨 {payload}")
+                        
+        except Exception as e:
+            logger.debug(f"IPC check error: {e}")
