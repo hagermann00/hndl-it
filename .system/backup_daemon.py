@@ -68,16 +68,21 @@ def get_folder_state():
     
     return hasher.hexdigest()
 
-def sync_to(dest, name):
+def sync_to(dest, name, exclude_logs=False):
     """Sync to a destination"""
     cmd = [
         'robocopy', str(SOURCE), str(dest),
         '/MIR',
-        '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv', 'logs',
-        '/XF', '*.log', '*.tmp',
+        '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+        '/XF', '*.tmp',
         '/NP', '/NFL', '/NDL', '/NJH', '/NJS',
         '/R:1', '/W:1'
     ]
+    
+    # Don't send logs to Google Drive - they grow too fast
+    if exclude_logs:
+        cmd.insert(6, 'logs')  # Add 'logs' to /XD exclusions
+        cmd.extend(['/XF', '*.log'])  # Also exclude .log files
     
     result = subprocess.run(cmd, capture_output=True, text=True)
     
@@ -93,8 +98,10 @@ def sync():
         log(f"  Changed: {', '.join(changed_files[:5])}" + 
             (f" (+{len(changed_files)-5} more)" if len(changed_files) > 5 else ""))
     
-    sync_to(DEST_LOCAL, "D: drive")
-    sync_to(DEST_GDRIVE, "Google Drive")
+    # D: drive = Local mirror + overflow from C:
+    sync_to(DEST_LOCAL, "D: drive (mirror)", exclude_logs=False)
+    # Google Drive = 30TB archive - gets EVERYTHING
+    sync_to(DEST_GDRIVE, "Google Drive (30TB archive)", exclude_logs=False)
     
     log("SYNC COMPLETE")
 
