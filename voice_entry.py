@@ -13,6 +13,7 @@ if PROJECT_ROOT not in sys.path:
 from shared.voice_input import init_voice_input, VOICE_AVAILABLE
 from shared.voice_router import parse_voice_command, VoiceTarget
 from shared.ipc import send_command
+from shared.orchestrator import Orchestrator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("voice-it")
@@ -78,27 +79,49 @@ def main():
     
     # Voice Logic
     if VOICE_AVAILABLE:
-        def handle_voice(text):
-            logger.info(f"🎤 Voice: {text}")
-            result = parse_voice_command(text)
-            target = result["target"]
+        # Initialize Orchestrator
+        orchestrator = Orchestrator()
+
+        def process_voice_command(text):
+            """
+            Routes voice command using the Orchestrator (Gemma 2B).
+            1. "Go to Reddit" -> Orchestrator -> {target: browser, action: navigate...}
+            2. IPC -> Browser
+            """
+            print(f"🎤 Voice Process: '{text}'")
             
-            logger.info(f"Routing to: {target}")
-            
-            if target == VoiceTarget.TODO_IT:
-                send_command("todo", "add_todo", {"text": result.get("todo_text", text)})
-            elif target == VoiceTarget.READ_IT:
-                # Send to read-it
-                send_command("read", "read_text", {"text": text}) # Simplified
-            else:
-                 # Route to hndl-it
-                 send_command("hndl", "input", {"text": text})
+            # Ask the Brain
+            try:
+                intent = orchestrator.process(text)
+                print(f"🧠 Orchestrator Intent: {intent}")
+                
+                target = intent.get("target")
+                action = intent.get("action")
+                params = intent.get("params", {})
+                
+                if target and target != "floater":
+                    # Route to specific agent (todo, browser, read)
+                    # We normalize the paylod for our simple IPC
+                    # Currently IPC expects: send_command(target, action, payload)
+                    send_command(target, action, params)
+                    
+                elif target == "floater":
+                    # Send back to main UI
+                    send_command("hndl", "input", {"text": text, "response": params.get("response")})
+                    
+            except Exception as e:
+                print(f"❌ Orchestration Failed: {e}")
+                # Fallback to dumb routing if Brain dies
+                target = "hndl"
+                if "read" in text.lower(): target = "read"
+                elif "todo" in text.lower(): target = "todo"
+                send_command(target, "input", {"text": text}) # Simplified
 
         def handle_listening(is_listening):
             icon.border_color = "#ff0000" if is_listening else "#ff00ff"
             icon.update()
             
-        vi = init_voice_input(handle_voice, handle_listening)
+        vi = init_voice_input(process_voice_command, handle_listening)
         
         # Link click
         icon.on_click = lambda: vi.cancel_listening() if vi.is_listening else vi._on_hotkey_pressed()

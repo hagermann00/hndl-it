@@ -16,15 +16,98 @@ import logging
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
 
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF, QThread
-from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QPixmap, QPainterPath
+from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QPixmap, QPainterPath, QAction
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("hndl-it.launcher")
+
+# ============================================================================
+# SINGLETON CHECK - Prevent multiple instances
+# ============================================================================
+LOCK_FILE = os.path.join(PROJECT_ROOT, "launch_suite.lock")
+
+def check_singleton():
+    """Fail-safe singleton check. Returns True if we can proceed, False if already running."""
+    try:
+        import psutil
+        
+        if os.path.exists(LOCK_FILE):
+            try:
+                with open(LOCK_FILE, 'r') as f:
+                    pid = int(f.read().strip())
+                
+                if psutil.pid_exists(pid):
+                    # Check if it's actually a Python process running launch_suite
+                    try:
+                        proc = psutil.Process(pid)
+                        cmdline = ' '.join(proc.cmdline())
+                        if 'launch_suite' in cmdline:
+                            logger.error(f"⛔ Suite already running (PID {pid}). Exiting.")
+                            return False
+                    except:
+                        pass  # Process exists but we can't read it, assume stale
+            except:
+                pass  # Stale or corrupt lock file
+        
+        # Write our PID
+        with open(LOCK_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Singleton check failed (proceeding anyway): {e}")
+        return True  # Fail-safe: if check fails, allow launch
+
+def cleanup_lock():
+    """Remove lock file on exit."""
+    try:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
+    except:
+        pass
+
+
+# ============================================================================
+# CONTEXT MENU HELPER - Adds right-click menu to any icon
+# ============================================================================
+def add_icon_context_menu(icon, module_name, app, hide_callback=None):
+    """
+    Add right-click context menu to an icon with:
+    - Hide [Module] (if hide_callback provided)
+    - Restart Suite
+    - Close Suite
+    """
+    icon.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+    
+    def show_menu(pos):
+        menu = QMenu()
+        
+        # Hide option (if callback provided)
+        if hide_callback:
+            hide_action = QAction(f"👁️ Hide {module_name}", icon)
+            hide_action.triggered.connect(hide_callback)
+            menu.addAction(hide_action)
+            menu.addSeparator()
+        
+        # Restart Suite
+        restart_action = QAction("♻️ Restart Suite", icon)
+        restart_action.triggered.connect(lambda: os.execl(sys.executable, sys.executable, *sys.argv))
+        menu.addAction(restart_action)
+        
+        # Close Suite
+        close_action = QAction("❌ Close Suite", icon)
+        close_action.triggered.connect(app.quit)
+        menu.addAction(close_action)
+        
+        menu.exec(icon.mapToGlobal(pos))
+    
+    icon.customContextMenuRequested.connect(show_menu)
 
 
 # ============================================================================
@@ -120,10 +203,20 @@ class ModuleIcon(QWidget):
 
 def launch_all():
     """Launch all modules with stacked floating icons."""
+    
+    # Singleton check - prevent duplicate instances
+    if not check_singleton():
+        logger.error("Aborting: Another instance is already running.")
+        sys.exit(1)
+    
     logger.info("🚀 Starting hndl-it Suite...")
     
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    
+    # Register cleanup on exit
+    import atexit
+    atexit.register(cleanup_lock)
     
     screen_geo = app.primaryScreen().availableGeometry()
     RIGHT_X = screen_geo.width() - 80
@@ -150,42 +243,30 @@ def launch_all():
         hndl_icon.show()
         
         # Context Menu for Restart/Close
-        hndl_icon.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        
-        def restart_suite():
-            logger.info("♻️ Restarting Suite...")
-            import sys
-            import os
-            # Relaunch current script
-            os.execl(sys.executable, sys.executable, *sys.argv)
-            
-        def show_context_menu(pos):
-            menu = QMenu()
-            
-            restart_action = QAction("♻️ Restart Suite", hndl_icon)
-            restart_action.triggered.connect(restart_suite)
-            
-            close_action = QAction("❌ Close Suite", hndl_icon)
-            close_action.triggered.connect(app.quit)
-            
-            menu.addAction(restart_action)
-            menu.addSeparator()
-            menu.addAction(close_action)
-            
-            menu.exec(hndl_icon.mapToGlobal(pos))
-            
-        hndl_icon.customContextMenuRequested.connect(show_context_menu)
+        add_icon_context_menu(hndl_icon, "hndl-it", app, hide_callback=lambda: tray.quick_dialog.hide())
         
         def toggle_hndl_input():
             if tray.quick_dialog.isVisible():
                 tray.quick_dialog.hide()
             else:
                 geo = hndl_icon.geometry()
-                x = geo.left() - tray.quick_dialog.width() - 10
-                y = geo.top() - 150  # Up and to the left
+                dialog_w = tray.quick_dialog.width()
+                dialog_h = tray.quick_dialog.height()
+                
+                # Magnetic attachment: Right edge of dialog touches Left edge of icon
+                x = geo.left() - dialog_w
+                # Center vertically relative to icon
+                y = geo.center().y() - (dialog_h // 2)
+                
+                # Debug logging
+                logger.info(f"📍 Input Bar Positioning:")
+                logger.info(f"   Icon geometry: {geo.x()}, {geo.y()}, {geo.width()}x{geo.height()}")
+                logger.info(f"   Dialog size: {dialog_w}x{dialog_h}")
+                logger.info(f"   Calculated position: ({x}, {y})")
                 
                 if x < 0:
                     x = geo.right() + 10
+                    logger.info(f"   Adjusted X (off-screen fix): {x}")
                 
                 tray.quick_dialog.move(x, y)
                 tray.quick_dialog.show()
@@ -216,13 +297,17 @@ def launch_all():
         # Don't execute main, just define the classes
         exec(open(os.path.join(PROJECT_ROOT, 'read-it', 'main.py')).read().split('def main():')[0], readit_module.__dict__)
         
-        FloatingIcon = readit_module.FloatingIcon
+        # Note: We use ModuleIcon instead of FloatingIcon for consistent context menu support
         ReaderPanel = readit_module.ReaderPanel
         PlaybackOverlay = readit_module.PlaybackOverlay
         SelectionPill = readit_module.SelectionPill
         SelectionMonitor = readit_module.SelectionMonitor
         
-        read_icon = FloatingIcon()
+        read_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'read-it', 'assets', 'icon.png'),
+            fallback_letter="R",
+            border_color="#e67e22"  # Orange
+        )
         read_icon.move(RIGHT_X, START_Y + SPACING)
         read_icon.show()
         
@@ -251,6 +336,9 @@ def launch_all():
         read_icon.clicked.connect(toggle_read_panel)
         pill.read_requested.connect(read_text)
         pill.summary_requested.connect(lambda t: read_text(f"Summary: {t[:200]}..."))
+        
+        # Context Menu
+        add_icon_context_menu(read_icon, "read-it", app, hide_callback=lambda: read_panel.hide())
         
         modules.append(("read-it", read_icon))
         logger.info("✅ read-it loaded")
@@ -287,6 +375,9 @@ def launch_all():
         
         todo_icon.clicked.connect(lambda: todo_app.panel.show() or todo_app.panel.raise_())
         
+        # Context Menu
+        add_icon_context_menu(todo_icon, "todo-it", app, hide_callback=lambda: todo_app.panel.hide())
+        
         modules.append(("todo-it", todo_icon))
         logger.info("✅ todo-it loaded")
         
@@ -310,6 +401,9 @@ def launch_all():
         voice_icon.show()
         
         modules.append(("voice-it", voice_icon))
+        
+        # Context Menu (no hide_callback for voice - it's always visible)
+        add_icon_context_menu(voice_icon, "voice-it", app)
         
         if VOICE_AVAILABLE:
             def handle_voice(text):

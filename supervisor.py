@@ -3,49 +3,75 @@ import sys
 import os
 import time
 import logging
+import psutil
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("supervisor")
 
-def run_module(name, script, start_y, extra_args=[]):
-    logger.info(f"🚀 Launching {name}...")
-    cmd = [sys.executable, script, f"--y={start_y}"] + extra_args
-    # Detached creation flags?
-    # For now standard Popen
-    return subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+LOCK_FILE = "supervisor.lock"
+
+def check_singleton():
+    """Ensure only one supervisor runs."""
+    if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            
+            if psutil.pid_exists(pid):
+                logger.error(f"⛔ Supervisor already running (PID {pid}). Exiting.")
+                print(f"Supervisor is already running (PID {pid}). Please kill it first or just close this window.")
+                sys.exit(1)
+            else:
+                logger.info("Found stale lock file. Overwriting.")
+        except:
+            pass
+            
+    with open(LOCK_FILE, 'w') as f:
+        f.write(str(os.getpid()))
 
 def main():
+    check_singleton()
+    
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Configuration
-    START_Y = 290
-    SPACING = 80
+    # We now use the Unified Suite Launcher
+    # This prevents "3 instances of every icon"
+    suite_script = os.path.join(base_dir, "launch_suite.py")
     
-    modules = [
-        ("hndl-it", os.path.join(base_dir, "floater", "main.py"), START_Y),
-        ("read-it", os.path.join(base_dir, "read-it", "main.py"), START_Y + SPACING),
-        ("todo-it", os.path.join(base_dir, "todo-it", "main.py"), START_Y + SPACING * 2),
-        ("voice-it", os.path.join(base_dir, "voice_entry.py"), START_Y + SPACING * 3)
-    ]
+    logger.info("🚀 Launching Unified Suite...")
     
-    procs = []
-    for name, script, y in modules:
-        p = run_module(name, script, y)
-        procs.append(p)
-        time.sleep(0.5) # Stagger slightly
-        
-    print("✅ All modules launched as independent processes.")
-    print("Each module manages its own Icon and Lifecycle.")
-    print("Voice routing handled via IPC in 'ipc/' folder.")
+    # Launch the Suite
+    suite_process = subprocess.Popen([sys.executable, suite_script], cwd=base_dir)
+    
+    print("✅ Hndl-it Suite Launched.")
+    print(f"   PID: {suite_process.pid}")
+    print("   Close this window to stop the suite.")
     
     try:
         while True:
-            time.sleep(5)
-            # Monitoring loop - could auto-restart here if desired
+            time.sleep(1)
+            # Check if suite is still running
+            if suite_process.poll() is not None:
+                logger.warning("Suite exited. Supervisor shutting down.")
+                break
     except KeyboardInterrupt:
-        print("Stopping all modules...")
-        for p in procs:
-            p.terminate()
+        print("\nStopping Suite...")
+        try:
+            parent = psutil.Process(suite_process.pid)
+            for child in parent.children(recursive=True):
+                try:
+                    child.terminate()
+                except:
+                    pass
+            parent.terminate()
+        except Exception as e:
+            logger.error(f"Error killing process tree: {e}")
+            # Fallback
+            suite_process.terminate()
+        
+    # Cleanup lock
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
 
 if __name__ == "__main__":
     main()

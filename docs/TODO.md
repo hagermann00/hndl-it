@@ -18,6 +18,13 @@
 
 ## 🔴 HIGH PRIORITY
 
+### Orchestrator & Agent Verification (2026-01-10)
+
+- [ ] **Todo-it persistence** - Save tasks to disk, reload on startup
+- [ ] **Verify floater input is connected to agents** - Route commands through Orchestrator
+- [ ] **Test multi-step command execution** - Simple but chained operations
+- [ ] **Clean shutdown** - Supervisor kills entire process tree with psutil
+
 ### Headless Execution
 
 - [ ] **read-it and hndl-it should NOT open terminal windows** ALL SHOURLRF BUT I GET IT DIURIGNM DEVELOPMENT

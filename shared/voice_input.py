@@ -73,10 +73,11 @@ class VoiceInput:
         self._stop_event.set()
     
     def _on_hotkey_pressed(self):
-        """Hotkey triggered - start listening in background thread."""
+        """Hotkey triggered - Toggle listening."""
         if self.is_listening:
-            return  # Already listening
-        
+            self.cancel_listening()
+            return
+
         thread = threading.Thread(target=self._listen_and_transcribe, daemon=True)
         thread.start()
     
