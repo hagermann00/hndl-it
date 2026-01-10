@@ -1,0 +1,27 @@
+{
+    "browser_agent": {
+        "port": 8766,
+        "chrome_debug_port": 9223
+    },
+    "desktop_agent": {
+        "port": 8767,
+        "vision_model": "qwen2.5-vl:7b"
+    },
+    "gemini": {
+        "model": "gemini-2.0-flash-exp",
+        "api_key_env": "GOOGLE_API_KEY"
+    },
+    "site_shortcuts": {
+        "google": "google.com",
+        "youtube": "youtube.com",
+        "reddit": "reddit.com",
+        "twitter": "twitter.com",
+        "x": "x.com",
+        "github": "github.com",
+        "perplexity": "perplexity.ai",
+        "chatgpt": "chat.openai.com",
+        "claude": "claude.ai",
+        "notebooklm": "notebooklm.google.com",
+        "gemini": "gemini.google.com"
+    }
+}

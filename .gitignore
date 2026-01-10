@@ -1,0 +1,40 @@
+# hndl-it - Ignore patterns
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Chrome profile data (large)
+chrome_profile/
+
+# Local settings (may contain sensitive data)
+settings.json
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temp
+*.tmp
+*.temp

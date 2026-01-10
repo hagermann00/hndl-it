@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📄 Doc Reader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: transparent;
+            min-height: 100vh;
+        }
+
+        /* Collapsed Icon Mode */
+        .floater {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            transition: all 0.3s ease;
+            z-index: 9999;
+        }
+
+        .floater.collapsed {
+            width: 200px;
+            height: 60px;
+        }
+
+        .floater.expanded {
+            width: 500px;
+            height: 600px;
+        }
+
+        .floater-container {
+            background: rgba(50, 40, 30, 0.95);
+            border: 2px solid rgba(255, 160, 80, 0.6);
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 160, 80, 0.2);
+            overflow: hidden;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Title Bar - Always Visible */
+        .title-bar {
+            background: rgba(45, 38, 28, 0.98);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: move;
+            border-bottom: 1px solid rgba(255, 160, 80, 0.3);
+            min-height: 44px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            transition: all 0.3s;
+        }
+
+        .status-dot.playing {
+            background: #44ff66;
+            box-shadow: 0 0 10px #44ff66;
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.paused {
+            background: #ffaa44;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .title {
+            color: #ffcc99;
+            font-size: 0.9em;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Mini Controls - Collapsed Mode */
+        .mini-controls {
+            display: flex;
+            gap: 4px;
+        }
+
+        .mini-btn {
+            background: rgba(255, 160, 80, 0.2);
+            border: 1px solid rgba(255, 160, 80, 0.4);
+            color: #ffcc99;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .mini-btn:hover {
+            background: rgba(255, 160, 80, 0.4);
+            transform: scale(1.1);
+        }
+
+        .expand-btn {
+            background: rgba(255, 160, 80, 0.3);
+        }
+
+        /* Expanded Content */
+        .expanded-content {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .floater.expanded .expanded-content {
+            display: flex;
+        }
+
+        /* Full Controls */
+        .full-controls {
+            padding: 10px;
+            background: rgba(40, 35, 30, 0.9);
+            border-bottom: 1px solid rgba(255, 160, 80, 0.2);
+        }
+
+        .control-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .control-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .ctrl-btn {
+            background: linear-gradient(135deg, #ff8844, #ff6622);
+            border: none;
+            color: white;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .ctrl-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 100, 50, 0.4);
+        }
+
+        .ctrl-btn.secondary {
+            background: rgba(80, 70, 60, 0.8);
+        }
+
+        select {
+            background: rgba(30, 25, 20, 0.9);
+            color: #ffcc99;
+            border: 1px solid rgba(255, 160, 80, 0.4);
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            flex: 1;
+        }
+
+        input[type="range"] {
+            width: 80px;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: rgba(255, 160, 80, 0.3);
+            border-radius: 3px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #ffaa44;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .speed-label {
+            color: #ffaa44;
+            font-size: 0.8em;
+            min-width: 35px;
+        }
+
+        /* Progress */
+        .progress-bar {
+            height: 4px;
+            background: rgba(255, 160, 80, 0.2);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff8844, #ffaa44);
+            width: 0%;
+            transition: width 0.2s;
+        }
+
+        /* Document Content */
+        .document-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: rgba(25, 22, 18, 0.9);
+        }
+
+        .document-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .document-area::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .document-area::-webkit-scrollbar-thumb {
+            background: rgba(255, 160, 80, 0.4);
+            border-radius: 4px;
+        }
+
+        .doc-content {
+            color: #e0d8d0;
+            font-size: 0.95em;
+            line-height: 1.7;
+        }
+
+        .doc-content h1,
+        .doc-content h2,
+        .doc-content h3 {
+            color: #ffaa44;
+            margin: 15px 0 10px 0;
+        }
+
+        .doc-content h1 {
+            font-size: 1.4em;
+        }
+
+        .doc-content h2 {
+            font-size: 1.2em;
+            border-bottom: 1px solid rgba(255, 160, 80, 0.2);
+            padding-bottom: 5px;
+        }
+
+        .doc-content h3 {
+            font-size: 1.05em;
+            color: #ffcc88;
+        }
+
+        .doc-content p {
+            margin-bottom: 10px;
+        }
+
+        .doc-content ul,
+        .doc-content ol {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        .doc-content li {
+            margin-bottom: 5px;
+        }
+
+        .doc-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 0.85em;
+        }
+
+        .doc-content th,
+        .doc-content td {
+            border: 1px solid rgba(255, 160, 80, 0.3);
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        .doc-content th {
+            background: rgba(255, 160, 80, 0.1);
+            color: #ffaa44;
+        }
+
+        .doc-content code {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: #88ff88;
+            font-size: 0.9em;
+        }
+
+        .doc-content pre {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .current-section {
+            background: rgba(255, 160, 80, 0.15);
+            border-left: 3px solid #ffaa44;
+            padding-left: 10px;
+            margin-left: -13px;
+        }
+
+        /* Summary Panel */
+        .summary-panel {
+            background: rgba(60, 50, 40, 0.95);
+            border-top: 1px solid rgba(255, 160, 80, 0.3);
+            padding: 10px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .summary-panel h4 {
+            color: #ffaa44;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .summary-text {
+            color: #ccbbaa;
+            font-size: 0.8em;
+            line-height: 1.5;
+        }
+
+        /* Bottom Actions */
+        .bottom-actions {
+            padding: 8px;
+            background: rgba(45, 38, 28, 0.98);
+            display: flex;
+            gap: 6px;
+            border-top: 1px solid rgba(255, 160, 80, 0.2);
+        }
+
+        .action-btn {
+            flex: 1;
+            background: rgba(80, 70, 60, 0.8);
+            border: 1px solid rgba(255, 160, 80, 0.3);
+            color: #ffcc99;
+            padding: 6px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(100, 90, 80, 0.9);
+        }
+
+        /* Drag handle visual */
+        .drag-handle {
+            width: 30px;
+            height: 4px;
+            background: rgba(255, 160, 80, 0.3);
+            border-radius: 2px;
+            margin: 0 auto 5px auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="floater collapsed" id="floater">
+        <div class="floater-container">
+            <!-- Title Bar - Always Visible -->
+            <div class="title-bar" id="titleBar">
+                <div class="status-dot" id="statusDot"></div>
+                <div class="title" id="titleText">📄 Doc Reader</div>
+
+                <!-- Mini Controls (Collapsed) -->
+                <div class="mini-controls" id="miniControls">
+                    <button class="mini-btn" onclick="togglePlay()" title="Play/Pause" id="miniPlayBtn">▶</button>
+                    <button class="mini-btn" onclick="goBack()" title="Back">⏪</button>
+                    <button class="mini-btn" onclick="goForward()" title="Forward">⏩</button>
+                    <button class="mini-btn expand-btn" onclick="toggleExpand()" title="Expand"
+                        id="expandBtn">⬆</button>
+                </div>
+            </div>
+
+            <!-- Expanded Content -->
+            <div class="expanded-content" id="expandedContent">
+                <!-- Full Controls -->
+                <div class="full-controls">
+                    <div class="control-row">
+                        <button class="ctrl-btn" onclick="togglePlay()" id="playBtn">▶️ Play</button>
+                        <button class="ctrl-btn secondary" onclick="goBack()">⏪ -10s</button>
+                        <button class="ctrl-btn secondary" onclick="goForward()">⏩ +10s</button>
+                        <button class="ctrl-btn secondary" onclick="stopReading()">⏹️</button>
+                    </div>
+                    <div class="control-row">
+                        <select id="voiceSelect" onchange="updateVoice()"></select>
+                    </div>
+                    <div class="control-row">
+                        <span style="color:#999;font-size:0.8em;">Speed:</span>
+                        <input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1"
+                            onchange="updateSpeed()">
+                        <span class="speed-label" id="speedLabel">1.0x</span>
+                        <button class="ctrl-btn secondary" onclick="loadFile()" style="margin-left:auto;">📁
+                            Load</button>
+                    </div>
+                </div>
+
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+
+                <!-- Document Area -->
+                <div class="document-area">
+                    <div class="doc-content" id="docContent">
+                        <h2>📄 Welcome to Doc Reader</h2>
+                        <p>Click <strong>📁 Load</strong> to open your markdown document.</p>
+                        <p>Or drag and drop a <code>.md</code> file here!</p>
+                        <hr style="border-color: rgba(255,160,80,0.2); margin: 15px 0;">
+                        <h3>Features:</h3>
+                        <ul>
+                            <li>🔊 Text-to-speech with multiple voices</li>
+                            <li>⏪⏩ Skip forward/back 10 seconds</li>
+                            <li>🎚️ Adjustable speed (0.5x - 2x)</li>
+                            <li>📝 Auto-summarization</li>
+                            <li>📤 Export to knowledge base</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Summary Panel -->
+                <div class="summary-panel" id="summaryPanel">
+                    <h4>📝 Summary</h4>
+                    <div class="summary-text" id="summaryText">Load a document to see its summary...</div>
+                </div>
+
+                <!-- Bottom Actions -->
+                <div class="bottom-actions">
+                    <button class="action-btn" onclick="generateSummary()">📝 Summarize</button>
+                    <button class="action-btn" onclick="copyAll()">📋 Copy</button>
+                    <button class="action-btn" onclick="exportDoc()">📤 Export</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // State
+        let isExpanded = false;
+        let isPlaying = false;
+        let synth = window.speechSynthesis;
+        let voices = [];
+        let utterance = null;
+        let textChunks = [];
+        let currentChunk = 0;
+        let documentText = '';
+
+        // Dragging
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        const floater = document.getElementById('floater');
+        const titleBar = document.getElementById('titleBar');
+
+        titleBar.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            isDragging = true;
+            dragOffset.x = e.clientX - floater.offsetLeft;
+            dragOffset.y = e.clientY - floater.offsetTop;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            floater.style.left = (e.clientX - dragOffset.x) + 'px';
+            floater.style.top = (e.clientY - dragOffset.y) + 'px';
+            floater.style.right = 'auto';
+            floater.style.bottom = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => isDragging = false);
+
+        // Load voices
+        function loadVoices() {
+            voices = synth.getVoices();
+            const select = document.getElementById('voiceSelect');
+            select.innerHTML = '';
+            voices.forEach((v, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = v.name.replace('Microsoft ', '').substring(0, 30);
+                if (v.name.includes('David') || v.name.includes('Zira')) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+        setTimeout(loadVoices, 100);
+
+        // Toggle expand/collapse
+        function toggleExpand() {
+            isExpanded = !isExpanded;
+            floater.className = isExpanded ? 'floater expanded' : 'floater collapsed';
+            document.getElementById('expandBtn').textContent = isExpanded ? '⬇' : '⬆';
+        }
+
+        // Play/Pause
+        function togglePlay() {
+            if (textChunks.length === 0) {
+                document.getElementById('titleText').textContent = '📄 Load a document first!';
+                return;
+            }
+
+            if (isPlaying) {
+                pauseReading();
+            } else {
+                startReading();
+            }
+        }
+
+        function startReading() {
+            isPlaying = true;
+            updatePlayButtons();
+            document.getElementById('statusDot').className = 'status-dot playing';
+            readChunk(currentChunk);
+        }
+
+        function pauseReading() {
+            isPlaying = false;
+            synth.cancel();
+            updatePlayButtons();
+            document.getElementById('statusDot').className = 'status-dot paused';
+        }
+
+        function stopReading() {
+            isPlaying = false;
+            synth.cancel();
+            currentChunk = 0;
+            updatePlayButtons();
+            document.getElementById('statusDot').className = 'status-dot';
+            document.getElementById('progressFill').style.width = '0%';
+        }
+
+        function updatePlayButtons() {
+            document.getElementById('miniPlayBtn').textContent = isPlaying ? '⏸' : '▶';
+            document.getElementById('playBtn').textContent = isPlaying ? '⏸️ Pause' : '▶️ Play';
+        }
+
+        function readChunk(index) {
+            if (index >= textChunks.length || !isPlaying) {
+                if (index >= textChunks.length) stopReading();
+                return;
+            }
+
+            currentChunk = index;
+            utterance = new SpeechSynthesisUtterance(textChunks[index]);
+
+            const vi = document.getElementById('voiceSelect').value;
+            if (voices[vi]) utterance.voice = voices[vi];
+            utterance.rate = parseFloat(document.getElementById('speedSlider').value);
+
+            utterance.onend = () => { if (isPlaying) readChunk(index + 1); };
+
+            updateProgress();
+            document.getElementById('titleText').textContent = `📄 ${currentChunk + 1}/${textChunks.length}`;
+            synth.speak(utterance);
+        }
+
+        function goBack() {
+            currentChunk = Math.max(0, currentChunk - 3);
+            if (isPlaying) { synth.cancel(); readChunk(currentChunk); }
+            updateProgress();
+        }
+
+        function goForward() {
+            currentChunk = Math.min(textChunks.length - 1, currentChunk + 3);
+            if (isPlaying) { synth.cancel(); readChunk(currentChunk); }
+            updateProgress();
+        }
+
+        function updateSpeed() {
+            const s = document.getElementById('speedSlider').value;
+            document.getElementById('speedLabel').textContent = s + 'x';
+        }
+
+        function updateVoice() { }
+
+        function updateProgress() {
+            const pct = textChunks.length ? ((currentChunk + 1) / textChunks.length) * 100 : 0;
+            document.getElementById('progressFill').style.width = pct + '%';
+        }
+
+        // Load file
+        function loadFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.md,.txt';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                const text = await file.text();
+                loadDocument(text, file.name);
+            };
+            input.click();
+        }
+
+        function loadDocument(markdown, name = 'Document') {
+            documentText = markdown;
+
+            if (typeof marked !== 'undefined') {
+                document.getElementById('docContent').innerHTML = marked.parse(markdown);
+            } else {
+                document.getElementById('docContent').innerHTML = '<pre>' + markdown + '</pre>';
+            }
+
+            const plainText = document.getElementById('docContent').innerText;
+            textChunks = splitChunks(plainText, 200);
+            currentChunk = 0;
+
+            document.getElementById('titleText').textContent = '📄 ' + name.substring(0, 20);
+            generateSummary();
+        }
+
+        function splitChunks(text, max) {
+            const sentences = text.split(/(?<=[.!?])\s+/);
+            const chunks = [];
+            let current = '';
+            sentences.forEach(s => {
+                if (current.length + s.length < max) {
+                    current += s + ' ';
+                } else {
+                    if (current) chunks.push(current.trim());
+                    current = s + ' ';
+                }
+            });
+            if (current) chunks.push(current.trim());
+            return chunks;
+        }
+
+        // Summary - simple extraction
+        function generateSummary() {
+            const text = document.getElementById('docContent').innerText;
+            const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.length > 20);
+            const summary = sentences.slice(0, 5).join(' ').substring(0, 300) + '...';
+            document.getElementById('summaryText').textContent = summary || 'No summary available.';
+        }
+
+        function copyAll() {
+            navigator.clipboard.writeText(documentText || document.getElementById('docContent').innerText);
+            document.getElementById('titleText').textContent = '📋 Copied!';
+            setTimeout(() => document.getElementById('titleText').textContent = '📄 Doc Reader', 2000);
+        }
+
+        function exportDoc() {
+            const blob = new Blob([documentText || document.getElementById('docContent').innerText], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'exported_document.md';
+            a.click();
+        }
+
+        // Drag and drop
+        document.body.addEventListener('dragover', (e) => e.preventDefault());
+        document.body.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const text = await file.text();
+                loadDocument(text, file.name);
+                if (!isExpanded) toggleExpand();
+            }
+        });
+    </script>
+</body>
+
+</html>
