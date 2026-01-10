@@ -799,14 +799,15 @@ class ReadItApp:
         self.playback_overlay.show_near_icon()
     
     def summarize_text(self, text: str):
-        """Summarize text (placeholder - will use local LLM later)."""
-        # For now, just show first 200 chars as summary
+        """Summarize text and auto-play (no panel)."""
+        # For now, just use first 200 chars as summary (will use LLM later)
         summary = text[:200] + "..." if len(text) > 200 else text
+        
+        # Load summary into TTS and auto-play (no panel shown)
         self.panel.text_edit.setText(f"📝 Summary:\n\n{summary}")
-        icon_pos = self.icon.pos()
-        panel_x = icon_pos.x() - 70 - self.panel.width()
-        self.panel.move(panel_x, icon_pos.y() - 150)
-        self.panel.show()
+        self.panel.start_reading()
+        self.playback_overlay.set_playing(True)
+        self.playback_overlay.show_near_icon()
     
     def toggle_playback(self):
         if self.panel.tts.is_playing:
