@@ -9,13 +9,20 @@
 **The next icon** - A TODO input/interface that needs future-proofing:
 
 - [ ] **todo-it module** - Standalone TODO input + management
-- [ ] **Speech input** that connects to both todo-it AND hndl-it
-- [ ] All modules need **verbal input button** as standard
+- [ ] **Speech input** that connects to both todo-it AND hndl-it (router triggerer verbal "rememeber todo later remnidn etc)
+- [ ] **Voice input button** for all qualifying modules THAT IT MAKES SENSE FOR
+- [ ] ALL MODULES NEED GFUTIURE PRROFFNG FOR TWO AS END THINGS DATAA OUTPUT DOCKING AMND I THINKG VISUALL Y TO OPITOONALLY EKEP EM INTERLLCIOKED AND LOFITICLY STANBLER
 - [ ] Future-proof interface design
 
 ---
 
 ## 🔴 HIGH PRIORITY
+
+### Headless Execution
+
+- [ ] **read-it and hndl-it should NOT open terminal windows** ALL SHOURLRF BUT I GET IT DIURIGNM DEVELOPMENT
+- [ ] Use pythonw or subprocess flags to run completely headless
+- [ ] Closing terminal should NOT kill the app
 
 ### UI Overhaul - Progress Ring Standard
 
@@ -31,9 +38,9 @@
 
 ### hndl-it UI Redesign  
 
-- [ ] **All input box** - no close or title bar
-- [ ] **Type and enter** OR **Speak and enter**
-- [ ] **Verbal input button** on all qualifying modules
+- [ ] ** MIUNI MIJNIMAL VISUAL OPTION JUS BARE INPUT BASICALLYE EXTREDN OUT FREOIEMN THE ICON ON LEFT SOIDE IT JSURT RETARACT ON ESC OR ENTR - no close or title bar
+- [ ] **Type and enter** OR **Speak and enter(EXTEND SILEBNCE)**
+- [ ] **Verbal input button** on all qualifying modules FROM A  SINGULR ICONM IN LINE ON TH RIGHT COLUM OR ON TEH MOUNTING BAR  THEOREHTICALL
 
 ### Cross-Module Standard
 
@@ -45,7 +52,7 @@
 
 ### read-it
 
-- [ ] **Summary uses local LLM** instead of first 200 chars
+- [ ] **Summary uses local LLM** instead of first 200 chars  (???????? )
 - [ ] **Back button** - go back actual 10 seconds (not just 2 sentences)
 - [ ] **Speed dropdown** - verify it changes TTS rate properly
 
@@ -53,7 +60,10 @@
 
 - [x] Multi-tab support added
 - [x] Hardened Chrome (dark mode, isolated profile)
+- [x] MORE DELIBERATE ACTION/STREPS TO CLOSE BECASUE APPARENTLY ITS CAN ONLY IUSER TAT ONE
 - [ ] Test multi-tab execution
+- [ ]   FTURE WORK LOCATIONS NEED TO NOT BE INPIXELS MUST BE PERCENTAGE OD PIXXELS I BELEEED WEIUTH IN CRRAS IN ASOZE WSITH SCREEM  
+- [ ]
 
 ---
 
@@ -70,8 +80,8 @@
 - [x] Restart button fixed with absolute path
 - [x] hndl-it popup lowered 200px
 - [x] Browser agent multi-tab + hardened Chrome
-
----
+- [ ] y-it inter conmnection and exeuviton game plan analusis
+- [ ] to do 9input and liwsting
 
 ## 💡 NOTES
 
