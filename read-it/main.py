@@ -558,7 +558,9 @@ class ReadItApp:
             self.panel.hide()
         else:
             icon_pos = self.icon.pos()
-            self.panel.move(icon_pos.x() - 300, icon_pos.y() - 150)
+            # Panel right edge 70px left of icon left edge
+            panel_x = icon_pos.x() - 70 - self.panel.width()
+            self.panel.move(panel_x, icon_pos.y() - 150)
             self.panel.show()
         # Icon always stays visible
     
@@ -576,7 +578,9 @@ class ReadItApp:
         # Open panel with text and start reading
         self.panel.text_edit.setText(text)
         icon_pos = self.icon.pos()
-        self.panel.move(icon_pos.x() - 300, icon_pos.y() - 150)
+        # Panel right edge 70px left of icon left edge
+        panel_x = icon_pos.x() - 70 - self.panel.width()
+        self.panel.move(panel_x, icon_pos.y() - 150)
         self.panel.show()
         self.panel.start_reading()
     
