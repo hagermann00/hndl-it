@@ -146,7 +146,7 @@ class FloaterTray(QSystemTrayIcon):
     def on_command(self, text):
         logger.info(f"Command: {text}")
         
-        # Check for Saved Task Match
+        # Check for Saved Task Match first
         from floater.config import ConfigManager
         config = ConfigManager()
         tasks = config.get_tasks()
@@ -157,11 +157,35 @@ class FloaterTray(QSystemTrayIcon):
         if matching_task:
             self.quick_dialog.add_log(f"⚡ Executing Task: {matching_task['name']}")
             for cmd in matching_task["commands"]:
-                # Add small delay? Or just fire?
-                # Fire rapidly for now
                 self.client.send_command(cmd)
         else:
-            self.client.send_command(text)
+            # Route through Orchestrator for semantic parsing
+            try:
+                from shared.orchestrator import get_orchestrator
+                from shared.ipc import route_intent
+                
+                orchestrator = get_orchestrator()
+                intent = orchestrator.process(text)
+                
+                # Log the intent
+                target = intent.get("target", "unknown")
+                action = intent.get("action", "unknown")
+                confidence = intent.get("confidence", 0)
+                method = intent.get("method", "unknown")
+                
+                self.quick_dialog.add_log(f"🎯 {target}/{action} (conf: {confidence:.0%}, via: {method})")
+                
+                # Route to appropriate module
+                if route_intent(intent):
+                    self.quick_dialog.add_log(f"✅ Routed to {target}")
+                else:
+                    self.quick_dialog.add_log(f"⚠️ Failed to route to {target}")
+                    
+            except Exception as e:
+                logger.error(f"Orchestrator error: {e}")
+                self.quick_dialog.add_log(f"❌ Error: {e}")
+                # Fallback to old behavior
+                self.client.send_command(text)
         
     def on_message(self, message):
         logger.info(f"Received: {message}")
