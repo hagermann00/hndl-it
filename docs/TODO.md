@@ -20,10 +20,10 @@
 
 ### Orchestrator & Agent Verification (2026-01-10)
 
-- [ ] **Todo-it persistence** - Save tasks to disk, reload on startup
-- [ ] **Verify floater input is connected to agents** - Route commands through Orchestrator
+- [x] **Todo-it persistence** - Save tasks to disk, reload on startup ✅ Already implemented!
+- [x] **Verify floater input is connected to agents** - Route commands through Orchestrator ✅ v5.2
 - [ ] **Test multi-step command execution** - Simple but chained operations
-- [ ] **Clean shutdown** - Supervisor kills entire process tree with psutil
+- [x] **Clean shutdown** - Supervisor kills entire process tree with psutil ✅ v5.1
 
 ### Headless Execution
 
