@@ -4,6 +4,17 @@
 
 ---
 
+## 🚀 NEXT MODULE: todo-it
+
+**The next icon** - A TODO input/interface that needs future-proofing:
+
+- [ ] **todo-it module** - Standalone TODO input + management
+- [ ] **Speech input** that connects to both todo-it AND hndl-it
+- [ ] All modules need **verbal input button** as standard
+- [ ] Future-proof interface design
+
+---
+
 ## 🔴 HIGH PRIORITY
 
 ### UI Overhaul - Progress Ring Standard
