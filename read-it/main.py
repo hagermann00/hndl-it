@@ -16,6 +16,7 @@ import os
 import re
 import pyttsx3
 import ctypes
+import time
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -24,6 +25,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QThread, QRectF, QTimer
 from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QCursor
+
+# Windows API for mouse state
+user32 = ctypes.windll.user32
+GetAsyncKeyState = user32.GetAsyncKeyState
+VK_LBUTTON = 0x01
 
 # === COLORS (Cyan/Teal theme - distinct from hndl-it lime) ===
 COLORS = {
@@ -95,6 +101,61 @@ class TTSWorker(QThread):
     
     def resume(self):
         self.is_paused = False
+
+
+# ============================================================================
+# SELECTION MONITOR - Detects text highlight (mouse release after drag)
+# ============================================================================
+class SelectionMonitor(QThread):
+    """Monitors for text selection by watching mouse state."""
+    text_selected = pyqtSignal(str)
+    
+    def __init__(self):
+        super().__init__()
+        self._running = True
+        self._was_pressed = False
+        self._press_pos = None
+    
+    def run(self):
+        import pyautogui
+        
+        while self._running:
+            # Check if left mouse button is pressed
+            is_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000
+            
+            if is_pressed and not self._was_pressed:
+                # Mouse just pressed - record position
+                self._press_pos = pyautogui.position()
+                
+            elif not is_pressed and self._was_pressed:
+                # Mouse just released - check if it was a drag
+                if self._press_pos:
+                    current_pos = pyautogui.position()
+                    distance = abs(current_pos[0] - self._press_pos[0]) + abs(current_pos[1] - self._press_pos[1])
+                    
+                    # If dragged more than 20 pixels, might be a selection
+                    if distance > 20:
+                        # Small delay to let selection complete
+                        time.sleep(0.1)
+                        
+                        # Try to copy selection via Ctrl+C
+                        import pyperclip
+                        old_clipboard = pyperclip.paste()
+                        
+                        pyautogui.hotkey('ctrl', 'c', interval=0.05)
+                        time.sleep(0.15)
+                        
+                        new_clipboard = pyperclip.paste()
+                        
+                        # If clipboard changed and has content, emit signal
+                        if new_clipboard and new_clipboard != old_clipboard and len(new_clipboard.strip()) > 3:
+                            self.text_selected.emit(new_clipboard)
+            
+            self._was_pressed = is_pressed
+            self.msleep(50)  # Check every 50ms
+    
+    def stop(self):
+        self._running = False
 
 
 # ============================================================================
@@ -703,15 +764,15 @@ class ReadItApp:
         self.playback_overlay.back_clicked.connect(self.back_10_sec)
         self.playback_overlay.speed_changed.connect(self.change_speed)
         
-        # Selection pill (clipboard popup)
+        # Selection pill (popup on highlight)
         self.pill = SelectionPill()
         self.pill.read_requested.connect(self.read_text)
         self.pill.summary_requested.connect(self.summarize_text)
         
-        # Clipboard watcher
-        self.clipboard = self.app.clipboard()
-        self.last_clipboard = ""
-        self.clipboard.dataChanged.connect(self.on_clipboard_change)
+        # Selection monitor - detects text highlight (NOT copy)
+        self.selection_monitor = SelectionMonitor()
+        self.selection_monitor.text_selected.connect(self.on_text_selected)
+        self.selection_monitor.start()
         
         # Position icon
         screen = self.app.primaryScreen().availableGeometry()
@@ -726,11 +787,9 @@ class ReadItApp:
             self.panel.move(panel_x, icon_pos.y() - 150)
             self.panel.show()
     
-    def on_clipboard_change(self):
-        text = self.clipboard.text()
-        if text and text != self.last_clipboard and len(text.strip()) > 3:
-            self.last_clipboard = text
-            self.pill.show_at_cursor(text)
+    def on_text_selected(self, text: str):
+        """Called when text is highlighted anywhere."""
+        self.pill.show_at_cursor(text)
     
     def read_text(self, text: str):
         """Read text and show playback overlay."""
