@@ -71,7 +71,7 @@ def main():
             geo = overlay.geometry()
             # Place to left of overlay
             x = geo.left() - tray.quick_dialog.width() - 10
-            y = geo.top()
+            y = geo.top() + 200
             
             # Clamp logic (simple)
             if x < 0: x = geo.right() + 10
