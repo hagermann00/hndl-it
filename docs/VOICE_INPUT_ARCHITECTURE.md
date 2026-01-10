@@ -1,13 +1,13 @@
 # Voice Input Architecture for hndl-it Ecosystem
 
-## Hotkey Layout
+## Hotkey Layout (FINAL)
 
-| Hotkey | Function | Destination |
-|--------|----------|-------------|
+| Trigger | Action | Destination |
+|---------|--------|-------------|
 | **Win+H** | Windows native dictation | System (keep as-is) |
-| **Ctrl+Shift+H** | hndl-it voice input | Routes to hndl-it router |
-| **Ctrl+Shift+R** | read-it voice command | "Read this", "Summarize" |
-| **Ctrl+Shift+T** | todo-it voice input | "Remember", "Todo", "Remind me" |
+| **Ctrl+Alt** | Triggers Win+H | Windows native dictation |
+| **Wheel click** | Triggers Win+H | Windows native dictation |
+| **Win+Alt** | hndl-it voice input | → hndl-it router (custom STT) |
 
 ---
 
