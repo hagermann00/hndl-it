@@ -59,7 +59,7 @@ def main():
     
     # Initial Position: Top-Rightish
     screen_geo = app.primaryScreen().availableGeometry()
-    overlay.move(screen_geo.width() - 100, 100)
+    overlay.move(screen_geo.width() - 100, 170)
     overlay.show()
     
     # Wiring

@@ -601,7 +601,7 @@ class ReadItApp:
         
         # Position icon
         screen = self.app.primaryScreen().availableGeometry()
-        self.icon.move(screen.width() - 100, screen.height() - 80)
+        self.icon.move(screen.width() - 100, screen.height() - 780)
     
     def toggle_panel(self):
         if self.panel.isVisible():
