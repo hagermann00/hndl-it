@@ -8,20 +8,22 @@ Features:
 - Hold & Drag: Move
 - TTS read-aloud
 - Different color scheme (cyan/teal)
+- SELECTION POPUP: Shows pill near cursor when text copied
 """
 
 import sys
 import os
 import re
 import pyttsx3
+import ctypes
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QSlider, QComboBox, QProgressBar,
     QFrame, QFileDialog
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QThread, QRectF
-from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QThread, QRectF, QTimer
+from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QCursor
 
 # === COLORS (Cyan/Teal theme - distinct from hndl-it lime) ===
 COLORS = {
@@ -93,6 +95,88 @@ class TTSWorker(QThread):
     
     def resume(self):
         self.is_paused = False
+
+
+# ============================================================================
+# SELECTION PILL - Appears near cursor when text copied
+# ============================================================================
+class SelectionPill(QWidget):
+    read_requested = pyqtSignal(str)  # Emits the text to read
+    
+    def __init__(self):
+        super().__init__()
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool |
+            Qt.WindowType.ToolTip  # Doesn't steal focus
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        
+        self.setFixedSize(100, 36)
+        self.pending_text = ""
+        
+        self.init_ui()
+        self.apply_styles()
+        
+        # Auto-hide timer
+        self.hide_timer = QTimer()
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.hide)
+    
+    def init_ui(self):
+        self.container = QFrame(self)
+        self.container.setObjectName("pill")
+        self.container.setGeometry(0, 0, 100, 36)
+        
+        layout = QHBoxLayout(self.container)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(4)
+        
+        self.read_btn = QPushButton("🔊 Read")
+        self.read_btn.clicked.connect(self.on_read_click)
+        layout.addWidget(self.read_btn)
+    
+    def apply_styles(self):
+        self.container.setStyleSheet(f"""
+            QFrame#pill {{
+                background-color: {COLORS['bg_dark']};
+                border: 2px solid {COLORS['primary']};
+                border-radius: 18px;
+            }}
+            QPushButton {{
+                background-color: transparent;
+                color: {COLORS['primary']};
+                border: none;
+                font-weight: bold;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                color: {COLORS['accent']};
+            }}
+        """)
+    
+    def show_at_cursor(self, text: str):
+        """Show pill near current cursor position with the given text."""
+        self.pending_text = text
+        
+        # Get cursor position
+        cursor_pos = QCursor.pos()
+        
+        # Offset slightly below and to the right
+        self.move(cursor_pos.x() + 10, cursor_pos.y() + 20)
+        self.show()
+        self.raise_()
+        
+        # Auto-hide after 4 seconds
+        self.hide_timer.start(4000)
+    
+    def on_read_click(self):
+        self.hide_timer.stop()
+        self.hide()
+        if self.pending_text:
+            self.read_requested.emit(self.pending_text)
 
 
 # ============================================================================
@@ -448,24 +532,53 @@ class ReadItApp:
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         
+        # Main icon (always visible)
         self.icon = FloatingIcon()
         self.icon.clicked.connect(self.toggle_panel)
         
+        # Reader panel
         self.panel = ReaderPanel()
-        self.panel.closed.connect(lambda: self.icon.show())
+        # Don't hide icon when panel closes - icon stays visible always
         
+        # Selection pill (clipboard popup)
+        self.pill = SelectionPill()
+        self.pill.read_requested.connect(self.read_text)
+        
+        # Clipboard watcher
+        self.clipboard = self.app.clipboard()
+        self.last_clipboard = ""
+        self.clipboard.dataChanged.connect(self.on_clipboard_change)
+        
+        # Position icon
         screen = self.app.primaryScreen().availableGeometry()
         self.icon.move(screen.width() - 100, screen.height() - 100)
     
     def toggle_panel(self):
         if self.panel.isVisible():
             self.panel.hide()
-            self.icon.show()
         else:
             icon_pos = self.icon.pos()
             self.panel.move(icon_pos.x() - 300, icon_pos.y() - 150)
             self.panel.show()
-            self.icon.hide()
+        # Icon always stays visible
+    
+    def on_clipboard_change(self):
+        """Called when clipboard content changes."""
+        text = self.clipboard.text()
+        # Only show pill if there's new text (not from us, not empty)
+        if text and text != self.last_clipboard and len(text.strip()) > 3:
+            self.last_clipboard = text
+            # Show pill near cursor
+            self.pill.show_at_cursor(text)
+    
+    def read_text(self, text: str):
+        """Read the given text using TTS."""
+        # Open panel with text and start reading
+        self.panel.text_edit.setText(text)
+        icon_pos = self.icon.pos()
+        self.panel.move(icon_pos.x() - 300, icon_pos.y() - 150)
+        self.panel.show()
+        self.panel.start_reading()
     
     def run(self):
         self.icon.show()
