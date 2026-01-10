@@ -226,6 +226,39 @@ Models MUST be under one of these licenses:
 
 ---
 
+## DEEP RESEARCH REQUEST
+
+**Go beyond the obvious.** Search for and analyze:
+
+### Related Problems at Different Scales
+
+- **Embedded/Edge AI:** How do robotics teams run vision + reasoning on tiny devices (Jetson, Raspberry Pi)? What tricks do they use?
+- **Mobile AI:** How do on-device assistants (Siri, Google Assistant local mode) balance vision + language?
+- **Gaming AI:** How do game engines run NPC reasoning alongside rendering on shared GPU?
+- **Autonomous Vehicles:** How do self-driving systems run perception + planning concurrently?
+- **Industrial Automation:** How do factory robots handle vision + decision-making locally?
+
+### Tangential Solutions to Extrapolate
+
+- **Model distillation:** Could we distill a large model's agentic behavior into a tiny specialist?
+- **Speculative execution:** Could we pre-compute likely next actions while current action runs?
+- **Caching/Memoization:** Could we cache common vision→action patterns to skip reasoning?
+- **Hybrid quantization:** Different precision for different layers based on importance?
+
+### Bootstrap / Emulation Ideation
+
+**Entertain wild ideas** - even if they seem impractical:
+
+- Could a TINY model (1B) emulate the STYLE of a large model's outputs if given enough examples?
+- Could we use the large model (Mixtral) to GENERATE training data for a small specialist?
+- Could we run the large model ONCE to create a decision tree, then use that tree at runtime?
+- Could we use retrieval-augmented generation (RAG) with a tiny model to approximate a large model?
+- Could the system LEARN which actions need big-brain vs small-brain over time?
+
+**The goal:** Find approaches that let us punch above our weight class.
+
+---
+
 ## CONTEXT FILES TO READ
 
 1. `README_AND_CONTEXT.md` - Project philosophy
