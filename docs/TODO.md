@@ -8,8 +8,8 @@
 
 **The next icon** - A TODO input/interface that needs future-proofing:
 
-- [ ] **todo-it module** - Standalone TODO input + management
-- [ ] **Speech input** that connects to both todo-it AND hndl-it (router triggerer verbal "rememeber todo later remnidn etc)
+- [x] **todo-it module** - Standalone TODO input + management (main.py done)
+- [x] **Speech input** that connects to both todo-it AND hndl-it (shared/voice_input.py + voice_router.py)
 - [ ] **Voice input button** for all qualifying modules THAT IT MAKES SENSE FOR
 - [ ] ALL MODULES NEED GFUTIURE PRROFFNG FOR TWO AS END THINGS DATAA OUTPUT DOCKING AMND I THINKG VISUALL Y TO OPITOONALLY EKEP EM INTERLLCIOKED AND LOFITICLY STANBLER
 - [ ] Future-proof interface design
@@ -44,9 +44,9 @@
 
 ### 🎤 Voice Input System (NEXT UP)
 
-- [ ] **Speech-to-text for hndl-it** - Direct audio input to router
-- [ ] **Custom hotkey** (e.g. Ctrl+Shift+H) routes to hndl-it voice input
-- [ ] **Keep Windows Win+H** for native dictation (don't override)
+- [x] **Speech-to-text for hndl-it** - Direct audio input to router (voice_input.py)
+- [x] **Custom hotkey** Win+Alt routes to hndl-it voice input
+- [x] **Keep Windows Win+H** for native dictation (Win+Alt used instead)
 - [ ] **Extended silence detection** = end of input, auto-submit
 - [ ] **Visual indicator** when listening (pulsing ring?)
 - [ ] **Works globally** - any app, routes to hndl-it

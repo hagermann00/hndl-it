@@ -6,4 +6,6 @@ PyQt6==6.8.0
 ollama
 mss
 Pillow
-
+SpeechRecognition
+pyaudio
+keyboard

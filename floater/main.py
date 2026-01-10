@@ -11,6 +11,21 @@ from floater.overlay import OverlayWidget
 from floater.console import ConsoleWindow
 from PyQt6.QtGui import QScreen
 
+# Voice and routing imports
+try:
+    from shared.voice_input import init_voice_input, VoiceInput, VOICE_AVAILABLE
+    from shared.voice_router import parse_voice_command, VoiceTarget
+except ImportError:
+    VOICE_AVAILABLE = False
+    print("Voice modules not available")
+
+# Todo-it import
+try:
+    from importlib import import_module
+    TODO_AVAILABLE = True
+except:
+    TODO_AVAILABLE = False
+
 # Logging Setup
 # Custom Handler to route logs to ConsoleWindow
 class GuiLogHandler(logging.Handler):
@@ -84,6 +99,68 @@ def main():
             
     overlay.clicked.connect(toggle_input)
     overlay.double_clicked.connect(lambda: console.show() or console.raise_() or console.activateWindow())
+    
+    # 3. Voice Input System (Win+Alt hotkey)
+    todo_app = None
+    
+    def handle_voice_result(text: str):
+        """Route voice command to appropriate module."""
+        nonlocal todo_app
+        logger.info(f"Voice input: {text}")
+        
+        if VOICE_AVAILABLE:
+            result = parse_voice_command(text)
+            target = result["target"]
+            
+            if target == VoiceTarget.TODO_IT:
+                # Route to todo-it
+                logger.info(f"Routing to todo-it: {result.get('todo_text', text)}")
+                if todo_app is None:
+                    try:
+                        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'todo-it'))
+                        from main import TodoItApp
+                        todo_app = TodoItApp()
+                    except Exception as e:
+                        logger.error(f"Failed to load todo-it: {e}")
+                
+                if todo_app:
+                    todo_app.panel.add_todo(result.get('todo_text', text))
+                    todo_app.panel.show()
+                    
+            elif target == VoiceTarget.READ_IT:
+                # Route to read-it (future)
+                logger.info(f"Would route to read-it: {result['command']}")
+                
+            elif target == VoiceTarget.BROWSER:
+                # Route to browser agent
+                logger.info(f"Would route to browser: {result['command']}")
+                tray.quick_dialog.input.setText(result['command'])
+                toggle_input()
+                
+            else:
+                # Default: show in hndl-it input
+                tray.quick_dialog.input.setText(text)
+                toggle_input()
+        else:
+            # No routing, just put in input
+            tray.quick_dialog.input.setText(text)
+            toggle_input()
+    
+    def handle_listening_state(is_listening: bool):
+        """Update UI when listening state changes."""
+        if is_listening:
+            logger.info("🎤 Listening...")
+            # Could add visual feedback on overlay here
+        else:
+            logger.info("🔇 Stopped listening")
+    
+    # Initialize voice input
+    if VOICE_AVAILABLE:
+        try:
+            voice = init_voice_input(handle_voice_result, handle_listening_state)
+            logger.info("Voice input ready. Press WIN+ALT to speak.")
+        except Exception as e:
+            logger.warning(f"Voice input failed to initialize: {e}")
     
     logger.info("Floater UI initialized. Overlay and Tray active.")
     sys.exit(app.exec())
