@@ -108,27 +108,18 @@ class OverlayWidget(QWidget):
             event.accept()
 
     def mouseReleaseEvent(self, event):
+        was_drag = False
         if self._dragging:
+            # Check if mouse actually moved (drag vs click)
+            current_pos = event.globalPosition().toPoint()
+            start_pos = self.frameGeometry().topLeft() + self._drag_pos
+            if (current_pos - start_pos).manhattanLength() > 5:
+                was_drag = True
             self._dragging = False
-            # Check if it was a click or a long drag
-            # For simplicity, if standard click happens quickly/small movement, Qt sends mouseRelease
-            # But we need to distinguish drag vs click.
-            # actually mouseRelease is always called.
-            # Let's use a simple heuristic or just trigger click if not moved much?
-            # Standard Qt: if we implemented dragging manually, 'clicked' isn't auto-emitted by QWidget.
-            # Let's emit clicked here if we want. 
-            # BUT: Double click event might interfere.
-            pass
-            
-        # Manually detection of click vs double click is tricky in custom widgets.
-        # QWidget has mouseDoubleClickEvent.
-        # If we want single click, we have to wait a bit to ensure it's not a double click.
-        # OR we just fire click immediately and if double click happens handle that too.
-        # Let's fire click on release if it wasn't a huge drag.
         
-        # We'll rely on mouseRelease for Single Click for now.
-        # Double Click is a separate event. 
-        self.clicked.emit()
+        # Only emit clicked if it wasn't a drag
+        if not was_drag:
+            self.clicked.emit()
 
     def mouseDoubleClickEvent(self, event):
         # Override the single click? 
