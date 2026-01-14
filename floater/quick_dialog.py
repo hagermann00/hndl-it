@@ -285,6 +285,11 @@ class QuickDialog(QDialog):
         self.a2ui_zone.action_triggered.connect(self._handle_a2ui_action)
         content_layout.addWidget(self.a2ui_zone)
         
+        # System Monitor
+        from .system_monitor import SystemMonitor
+        self.sys_monitor = SystemMonitor()
+        content_layout.addWidget(self.sys_monitor)
+        
         self.main_layout.addWidget(self.content_widget)
         self.setLayout(self.main_layout)
 

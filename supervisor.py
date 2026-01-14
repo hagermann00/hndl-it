@@ -52,6 +52,14 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     python_exe = get_python_executable(base_dir)
     
+    # We now use the Unified Suite Launcher
+    # This prevents "3 instances of every icon"
+    # Determine which Python to use (prefer the .venv)
+    venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
+    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
+    
+    suite_script = os.path.join(base_dir, "launch_suite.py")
+    
     suite_script_path = os.path.join(base_dir, SUITE_SCRIPT)
     if not os.path.exists(suite_script_path):
         logger.error(f"❌ Could not find {SUITE_SCRIPT}")

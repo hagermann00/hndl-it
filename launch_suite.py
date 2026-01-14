@@ -299,6 +299,130 @@ def init_timer_it(app, icon):
             if timer.panel.isVisible():
                 timer.panel.hide()
             else:
+                capture_panel.move(capture_icon.x() - capture_panel.width() - 10, capture_icon.y())
+                capture_panel.show()
+                
+        capture_icon.clicked.connect(toggle_capture)
+        add_icon_context_menu(capture_icon, "capture-it", app, hide_callback=lambda: capture_panel.hide())
+        
+        modules.append(("capture-it", capture_icon))
+        logger.info("✅ capture-it loaded")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load capture-it: {e}")
+    
+    # ========== 4. Voice Input (Global Hotkey + Icon) ==========
+    try:
+        from shared.voice_input import init_voice_input, VOICE_AVAILABLE, get_voice_input
+        from shared.voice_router import parse_voice_command, VoiceTarget
+        
+        # Create Icon First
+        voice_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'voice_it_icon.png'),
+            fallback_letter="V",
+            border_color="#ff00ff"  # Magenta
+        )
+        # Create Icon First
+        voice_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'voice_it_icon.png'),
+            fallback_letter="V",
+            border_color="#ff00ff"  # Magenta
+        )
+        voice_icon.move(RIGHT_X, START_Y + SPACING * 4)
+        voice_icon.show()
+        
+        modules.append(("voice-it", voice_icon))
+        
+        # Context Menu (no hide_callback for voice - it's always visible)
+        add_icon_context_menu(voice_icon, "voice-it", app)
+        
+        if VOICE_AVAILABLE:
+            def handle_voice(text):
+                logger.info(f"🎤 Voice: {text}")
+                result = parse_voice_command(text)
+                
+                if result["target"] == VoiceTarget.TODO_IT:
+                    try:
+                        # todo_app is captured from enclosing scope
+                        if todo_app:
+                            todo_app.panel.add_todo(result.get('todo_text', text))
+                            todo_app.panel.show()
+                    except Exception as e:
+                        logger.error(f"Failed to route to todo-it: {e}")
+                
+                elif result["target"] == VoiceTarget.READ_IT:
+                    try:
+                        cmd = result["command"]
+                        # Call global speak or read_it component
+                        from shared.voice_output import speak
+                        speak(cmd)
+                        logger.info(f"🔊 Speaking: {cmd}")
+                    except Exception as e:
+                        logger.error(f"Failed to speak: {e}")
+
+                elif "clean" in text.lower() or "storage" in text.lower():
+                    try:
+                        logger.info("🧹 Triggering Drive Cleanup...")
+                        script = os.path.join(PROJECT_ROOT, "scripts", "drive_cleanup.py")
+                        subprocess.Popen([sys.executable, script])
+                        from shared.voice_output import speak
+                        speak("Starting drive cleanup protocol")
+                    except Exception as e:
+                        logger.error(f"Failed to start cleanup: {e}")
+
+                else:
+                    try:
+                        if tray:
+                            tray.quick_dialog.input.setText(text)
+                            toggle_hndl_input()
+                    except Exception as e:
+                        logger.error(f"Failed to route to hndl-it: {e}")
+            
+            def handle_listening(is_listening):
+                logger.info(f"🎤 Listening state: {is_listening}")
+                # Visual feedback on icon
+                if is_listening:
+                    voice_icon.border_color = "#ff0000"  # Red when recording
+                    voice_icon.update()
+                else:
+                    voice_icon.border_color = "#ff00ff"  # Back to Magenta
+                    voice_icon.update()
+            
+            vi = init_voice_input(handle_voice, handle_listening)
+            
+            # Click to toggle listening (Click = Submit if running)
+            def toggle_voice():
+                if vi.is_listening:
+                    # User requested 'Click should submit'
+                    # Assuming vi has stop_listening() which processes buffer
+                    if hasattr(vi, 'stop_listening'):
+                        vi.stop_listening()
+                    else:
+                        vi.cancel_listening() # Fallback
+                else:
+                    vi._on_hotkey_pressed()
+            
+            voice_icon.clicked.connect(toggle_voice)
+            
+            # Double Click to Cancel
+            voice_icon.double_clicked.connect(lambda: vi.cancel_listening() if vi.is_listening else None)
+            
+            # --- Bonus Hotkeys ---
+            try:
+                import keyboard
+                # "The other two are for native dictation" -> Simulating Win+H
+                keyboard.add_hotkey("ctrl+windows+alt", lambda: keyboard.send("windows+h"))
+                logger.info("✅ Native Dictation shortcut (Ctrl+Win+Alt -> Win+H) active")
+            except Exception as e:
+                logger.warning(f"Failed to register native hotkeys: {e}")
+            
+            # --- TTS Hotkeys (Middle-click + Ctrl+Alt+Win for speaking selected text) ---
+            try:
+                from shared.tts_hotkeys import register_tts_hotkeys
+                register_tts_hotkeys()
+                logger.info("✅ TTS Hotkeys active (Middle-click, Ctrl+Alt+Win)")
+            except Exception as e:
+                logger.warning(f"Failed to register TTS hotkeys: {e}")
                 timer.panel.move(icon.x() - timer.panel.width() - 10, icon.y())
                 timer.panel.show()
         icon.clicked.connect(toggle)
