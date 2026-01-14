@@ -11,7 +11,10 @@ import logging
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from shared.ipc import check_mailbox
+import threading
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from shared.ipc import check_mailbox, get_mailbox_path
 
 try:
     import pyautogui
@@ -41,6 +44,30 @@ def main():
     pyautogui.FAILSAFE = True  # Move mouse to corner to abort
     pyautogui.PAUSE = 0.1  # Small delay between actions
     
+    # Setup Watchdog
+    process_event = threading.Event()
+    desktop_mailbox_path = get_mailbox_path("desktop")
+    ipc_dir = os.path.dirname(desktop_mailbox_path)
+
+    class IPCHandler(FileSystemEventHandler):
+        def _trigger(self, event_path):
+            if event_path.endswith("desktop.json"):
+                process_event.set()
+
+        def on_created(self, event):
+            self._trigger(event.src_path)
+
+        def on_modified(self, event):
+            self._trigger(event.src_path)
+
+        def on_moved(self, event):
+            self._trigger(event.dest_path)
+
+    observer = Observer()
+    observer.schedule(IPCHandler(), path=ipc_dir, recursive=False)
+    observer.start()
+    logger.info(f"👀 Watching {ipc_dir} for events...")
+
     try:
         while True:
             # Check for commands
@@ -102,12 +129,19 @@ def main():
                         
                 except Exception as e:
                     logger.error(f"Error executing {action}: {e}")
+
+                # Check again immediately if we processed something
+                continue
             
-            time.sleep(0.5)  # Poll interval
+            # Wait for event
+            process_event.wait(timeout=1.0)
+            process_event.clear()
             
     except KeyboardInterrupt:
         logger.info("Interrupted")
     finally:
+        observer.stop()
+        observer.join()
         logger.info("Desktop Handler stopped")
 
 

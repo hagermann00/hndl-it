@@ -11,3 +11,4 @@ SpeechRecognition
 keyboard
 psutil
 pyautogui
+watchdog
