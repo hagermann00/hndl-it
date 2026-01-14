@@ -16,7 +16,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QTreeWidget, QTreeWidgetItem, QFrame, QLabel, QMenu,
-    QTextEdit, QSplitter, QApplication
+    QTextEdit, QSplitter, QApplication, QDialog, QDialogButtonBox, QFormLayout
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QSize
 from PyQt6.QtGui import QFont, QColor, QBrush, QAction, QIcon
@@ -143,6 +143,58 @@ class QuickInputBox(QFrame):
         if text:
             self.submitted.emit(text)
             self.input.clear()
+
+
+class AddLinkDialog(QDialog):
+    """Dialog to add a URL link with a title."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Link")
+        self.setModal(True)
+
+        layout = QFormLayout(self)
+        self.url_input = QLineEdit()
+        self.title_input = QLineEdit()
+        layout.addRow("URL:", self.url_input)
+        layout.addRow("Title:", self.title_input)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.apply_styles()
+
+    def apply_styles(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {COLORS['bg_dark']};
+                color: {COLORS['text']};
+            }}
+            QLineEdit {{
+                background-color: {COLORS['bg_panel']};
+                color: {COLORS['text']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 4px;
+                padding: 5px;
+            }}
+            QPushButton {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['secondary']};
+            }}
+        """)
+
+    def get_data(self):
+        return {
+            'url': self.url_input.text().strip(),
+            'title': self.title_input.text().strip()
+        }
 
 
 class TodoPanel(QFrame):
@@ -401,10 +453,16 @@ class TodoPanel(QFrame):
         self.save_data()
     
     def add_link_dialog(self, todo):
-        """TODO: Add link dialog."""
-        # For now, just append to notes
-        todo.notes += "\n[Link placeholder]"
-        self.save_data()
+        """Show dialog to add a link."""
+        dialog = AddLinkDialog(self)
+        if dialog.exec():
+            data = dialog.get_data()
+            if data['url']:
+                # If no title is given, use the URL as the title
+                if not data['title']:
+                    data['title'] = data['url']
+                todo.links.append(data)
+                self.save_data()
     
     def show_notes(self, todo):
         """Show/hide notes panel for this item."""
