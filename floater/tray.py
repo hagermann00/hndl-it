@@ -2,7 +2,7 @@ import os
 import logging
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import QThread
+from PyQt6.QtCore import QThread, QObject, pyqtSignal
 
 from floater.quick_dialog import QuickDialog
 from floater.client import MultiAgentClient # Changed
@@ -11,6 +11,27 @@ from floater.settings import SettingsDialog
 from floater.content_forge import ContentForge
 
 logger = logging.getLogger("hndl-it.floater.tray")
+
+class OrchestratorWorker(QObject):
+    """
+    Worker to process orchestrator intents in a background thread.
+    Prevents blocking the UI thread during LLM calls.
+    """
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str, str)
+
+    def __init__(self, text):
+        super().__init__()
+        self.text = text
+
+    def run(self):
+        try:
+            from shared.orchestrator import get_orchestrator
+            orchestrator = get_orchestrator()
+            intent = orchestrator.process(self.text)
+            self.finished.emit(intent)
+        except Exception as e:
+            self.error.emit(str(e), self.text)
 
 class FloaterTray(QSystemTrayIcon):
     def __init__(self, app):
@@ -173,33 +194,58 @@ class FloaterTray(QSystemTrayIcon):
             for cmd in matching_task["commands"]:
                 self.client.send_command(cmd)
         else:
-            # Route through Orchestrator for semantic parsing
-            try:
-                from shared.orchestrator import get_orchestrator
-                from shared.ipc import route_intent
+            # Route through Orchestrator for semantic parsing (OFFLOADED TO THREAD)
+            self.quick_dialog.set_working(True)
+            self.quick_dialog.add_log("🤔 Thinking...")
+
+            self.orch_thread = QThread()
+            self.orch_worker = OrchestratorWorker(text)
+            self.orch_worker.moveToThread(self.orch_thread)
+
+            self.orch_thread.started.connect(self.orch_worker.run)
+            self.orch_worker.finished.connect(self.on_orchestrator_finished)
+            self.orch_worker.error.connect(self.on_orchestrator_error)
+
+            # Cleanup
+            self.orch_worker.finished.connect(self.orch_thread.quit)
+            self.orch_worker.finished.connect(self.orch_worker.deleteLater)
+            self.orch_worker.error.connect(self.orch_thread.quit)
+            self.orch_worker.error.connect(self.orch_worker.deleteLater)
+            self.orch_thread.finished.connect(self.orch_thread.deleteLater)
+
+            self.orch_thread.start()
+
+    def on_orchestrator_finished(self, intent):
+        self.quick_dialog.set_working(False)
+        try:
+            from shared.ipc import route_intent
+
+            # Log the intent
+            target = intent.get("target", "unknown")
+            action = intent.get("action", "unknown")
+            confidence = intent.get("confidence", 0)
+            method = intent.get("method", "unknown")
+
+            self.quick_dialog.add_log(f"🎯 {target}/{action} (conf: {confidence:.0%}, via: {method})")
+
+            # Route to appropriate module
+            if route_intent(intent):
+                self.quick_dialog.add_log(f"✅ Routed to {target}")
+            else:
+                self.quick_dialog.add_log(f"⚠️ Failed to route to {target}")
                 
-                orchestrator = get_orchestrator()
-                intent = orchestrator.process(text)
-                
-                # Log the intent
-                target = intent.get("target", "unknown")
-                action = intent.get("action", "unknown")
-                confidence = intent.get("confidence", 0)
-                method = intent.get("method", "unknown")
-                
-                self.quick_dialog.add_log(f"🎯 {target}/{action} (conf: {confidence:.0%}, via: {method})")
-                
-                # Route to appropriate module
-                if route_intent(intent):
-                    self.quick_dialog.add_log(f"✅ Routed to {target}")
-                else:
-                    self.quick_dialog.add_log(f"⚠️ Failed to route to {target}")
-                    
-            except Exception as e:
-                logger.error(f"Orchestrator error: {e}")
-                self.quick_dialog.add_log(f"❌ Error: {e}")
-                # Fallback to old behavior
-                self.client.send_command(text)
+        except Exception as e:
+            # We don't have original text here easily, so we just log error.
+            # Usually intent processing errors shouldn't trigger fallback to raw command.
+            logger.error(f"Intent routing error: {e}")
+            self.quick_dialog.add_log(f"❌ Error: {e}")
+
+    def on_orchestrator_error(self, error_msg, text):
+        self.quick_dialog.set_working(False)
+        logger.error(f"Orchestrator error: {error_msg}")
+        self.quick_dialog.add_log(f"❌ Error: {error_msg}")
+        # Fallback to old behavior
+        self.client.send_command(text)
         
     def on_message(self, message):
         logger.info(f"Received: {message}")
