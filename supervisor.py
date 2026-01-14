@@ -36,12 +36,15 @@ def main():
     
     # We now use the Unified Suite Launcher
     # This prevents "3 instances of every icon"
-    suite_script = os.path.join(base_dir, "launch_suite.py")
+    # Determine which Python to use (prefer the .venv)
+    venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
+    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
     
-    logger.info("🚀 Launching Unified Suite...")
+    logger.info(f"🚀 Launching Unified Suite using {python_exe}...")
     
     # Launch the Suite
-    suite_process = subprocess.Popen([sys.executable, suite_script], cwd=base_dir)
+    suite_process = subprocess.Popen([python_exe, suite_script], cwd=base_dir)
+
     
     print("✅ Hndl-it Suite Launched.")
     print(f"   PID: {suite_process.pid}")

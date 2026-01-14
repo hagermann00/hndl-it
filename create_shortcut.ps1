@@ -1,20 +1,7 @@
-$WshShell = New-Object -ComObject WScript.Shell
-$DesktopPath = $WshShell.SpecialFolders.Item("Desktop")
-$ShortcutPath = Join-Path -Path $DesktopPath -ChildPath "Hndl-it.lnk"
-$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-$Shortcut.TargetPath = "wscript.exe"
-# Pass script as argument to wscript
-$ScriptPath = Join-Path -Path $PSScriptRoot -ChildPath "start_silent.vbs"
-$Shortcut.Arguments = """$ScriptPath"""
-$Shortcut.WorkingDirectory = $PSScriptRoot
-# Try to use icon if available
-$IconPath = Join-Path -Path $PSScriptRoot -ChildPath "floater\assets\icon.png"
-if (-not (Test-Path $IconPath)) {
-    $IconPath = Join-Path -Path $PSScriptRoot -ChildPath "floater\assets\icon.jpg"
-}
-
-if (Test-Path $IconPath) {
-    $Shortcut.IconLocation = $IconPath
-}
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("C:\Users\dell3630\Desktop\Antigravity Suite.lnk")
+$Shortcut.TargetPath = "pythonw.exe"
+$Shortcut.Arguments = "c:\iiwii_db\hndl-it\launch_suite.py"
+$Shortcut.WorkingDirectory = "c:\iiwii_db\hndl-it"
+$Shortcut.IconLocation = "c:\iiwii_db\hndl-it\floater\assets\hndl_it_icon.png"
 $Shortcut.Save()
-Write-Host "Shortcut created at $ShortcutPath"

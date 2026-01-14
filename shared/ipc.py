@@ -180,6 +180,10 @@ def route_intent(intent: Dict[str, Any]) -> bool:
     if target == "system":
         return _handle_system_command(action, params)
     
+    # Special handling for A2UI render
+    if target == "floater" and action == "render_a2ui":
+        return send_command("floater", "render_a2ui", params)
+    
     # Route to module
     return send_command(target, action, params)
 

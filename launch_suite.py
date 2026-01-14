@@ -127,7 +127,7 @@ class ModuleIcon(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        self.size_val = 60
+        self.size_val = 70
         self.setFixedSize(self.size_val, self.size_val)
         
         self.icon_path = icon_path
@@ -145,41 +145,44 @@ class ModuleIcon(QWidget):
         if self.icon_path and os.path.exists(self.icon_path):
             pixmap = QPixmap(self.icon_path)
             
-            # Draw circular clipped icon
-            path = QPainterPath()
-            path.addEllipse(0.0, 0.0, float(self.width()), float(self.height()))
-            painter.setClipPath(path)
-            painter.drawPixmap(self.rect(), pixmap)
-            
-            # Draw border
-            painter.setClipping(False)
-            pen = QPen(QColor(self.border_color))
-            pen.setWidth(3)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(pen)
-            painter.drawEllipse(3, 3, self.width()-6, self.height()-6)
-        else:
-            # Fallback gradient circle
-            cx = self.width() / 2.0
-            cy = self.height() / 2.0
-            gradient = QRadialGradient(cx, cy, self.width() / 2.0)
-            gradient.setColorAt(0, QColor("#1a1a2e"))
-            gradient.setColorAt(1, QColor("#0a0a1a"))
-            
-            painter.setBrush(QBrush(gradient))
-            pen = QPen(QColor(self.border_color))
-            pen.setWidth(3)
-            painter.setPen(pen)
-            
-            rect = QRectF(3, 3, self.width()-6, self.height()-6)
-            painter.drawEllipse(rect)
-            
-            painter.setPen(QColor("#ffffff"))
-            font = painter.font()
-            font.setBold(True)
-            font.setPointSize(18)
-            painter.setFont(font)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.fallback_letter)
+            if not pixmap.isNull():
+                # Draw circular clipped icon
+                path = QPainterPath()
+                path.addEllipse(0.0, 0.0, float(self.width()), float(self.height()))
+                painter.setClipPath(path)
+                painter.drawPixmap(self.rect(), pixmap)
+                
+                # Draw border
+                painter.setClipping(False)
+                pen = QPen(QColor(self.border_color))
+                pen.setWidth(3)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(pen)
+                painter.drawEllipse(3, 3, self.width()-6, self.height()-6)
+                return
+
+        # Fallback gradient circle (if path missing or image invalid)
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        gradient = QRadialGradient(cx, cy, self.width() / 2.0)
+        gradient.setColorAt(0, QColor("#1a1a2e"))
+        gradient.setColorAt(1, QColor("#0a0a1a"))
+        
+        painter.setBrush(QBrush(gradient))
+        pen = QPen(QColor(self.border_color))
+        pen.setWidth(3)
+        painter.setPen(pen)
+        
+        rect = QRectF(3, 3, self.width()-6, self.height()-6)
+        painter.drawEllipse(rect)
+        
+        painter.setPen(QColor("#ffffff"))
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(18)
+        painter.setFont(font)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.fallback_letter)
+
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -221,7 +224,7 @@ def launch_all():
     screen_geo = app.primaryScreen().availableGeometry()
     RIGHT_X = screen_geo.width() - 80
     START_Y = 290
-    SPACING = 80
+    SPACING = 90
     
     modules = []
     
@@ -229,6 +232,7 @@ def launch_all():
     try:
         from floater.tray import FloaterTray
         from floater.console import ConsoleWindow
+        from floater.capture_tool import CapturePanel
         
         console = ConsoleWindow()
         tray = FloaterTray(app)
@@ -286,60 +290,29 @@ def launch_all():
     
     # ========== 2. READ-IT (TTS Reader) ==========
     try:
-        # Import components directly, not the app
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'read-it'))
+        sys.path.insert(0, PROJECT_ROOT)
+        from reading_pill import ReadingPill
         
-        # Import just what we need
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("readit", os.path.join(PROJECT_ROOT, 'read-it', 'main.py'))
-        readit_module = importlib.util.module_from_spec(spec)
-        
-        # Don't execute main, just define the classes
-        exec(open(os.path.join(PROJECT_ROOT, 'read-it', 'main.py')).read().split('def main():')[0], readit_module.__dict__)
-        
-        # Note: We use ModuleIcon instead of FloatingIcon for consistent context menu support
-        ReaderPanel = readit_module.ReaderPanel
-        PlaybackOverlay = readit_module.PlaybackOverlay
-        SelectionPill = readit_module.SelectionPill
-        SelectionMonitor = readit_module.SelectionMonitor
+        pill = ReadingPill()
         
         read_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'read-it', 'assets', 'icon.png'),
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'read_it_icon.png'),
             fallback_letter="R",
-            border_color="#e67e22"  # Orange
+            border_color="#00d4ff" # Cyan
         )
-        read_icon.move(RIGHT_X, START_Y + SPACING)
+        # Position at Slot 5 (0=Hndl, 1=Shed, 2=Todo, 3=Capture, 4=Voice, 5=Read)
+        read_icon.move(RIGHT_X, START_Y + SPACING * 5)
         read_icon.show()
         
-        read_panel = ReaderPanel()
-        playback_overlay = PlaybackOverlay(read_icon)
-        pill = SelectionPill()
-        
-        # Selection monitor
-        selection_monitor = SelectionMonitor()
-        selection_monitor.text_selected.connect(pill.show_at_cursor)
-        selection_monitor.start()
-        
-        def toggle_read_panel():
-            if read_panel.isVisible():
-                read_panel.hide()
+        def toggle_read():
+            if pill.isVisible():
+                pill.hide()
             else:
-                read_panel.move(read_icon.x() - read_panel.width() - 10, read_icon.y() - 150)
-                read_panel.show()
+                pill.show()
+                
+        read_icon.clicked.connect(toggle_read)
         
-        def read_text(text):
-            read_panel.text_edit.setText(text)
-            read_panel.start_reading()
-            playback_overlay.set_playing(True)
-            playback_overlay.show_near_icon()
-        
-        read_icon.clicked.connect(toggle_read_panel)
-        pill.read_requested.connect(read_text)
-        pill.summary_requested.connect(lambda t: read_text(f"Summary: {t[:200]}..."))
-        
-        # Context Menu
-        add_icon_context_menu(read_icon, "read-it", app, hide_callback=lambda: read_panel.hide())
-        
+        add_icon_context_menu(read_icon, "read-it", app, hide_callback=lambda: pill.hide())
         modules.append(("read-it", read_icon))
         logger.info("✅ read-it loaded")
         
@@ -347,16 +320,6 @@ def launch_all():
         logger.error(f"❌ Failed to load read-it: {e}")
         import traceback
         traceback.print_exc()
-        
-        # Fallback - simple icon
-        read_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'read-it', 'assets', 'icon.png'),
-            fallback_letter="R",
-            border_color="#e67e22"
-        )
-        read_icon.move(RIGHT_X, START_Y + SPACING)
-        read_icon.show()
-        modules.append(("read-it (basic)", read_icon))
     
     # ========== 3. TODO-IT (Task Manager) ==========
     try:
@@ -373,7 +336,15 @@ def launch_all():
         todo_icon.move(RIGHT_X, START_Y + SPACING * 2)
         todo_icon.show()
         
-        todo_icon.clicked.connect(lambda: todo_app.panel.show() or todo_app.panel.raise_())
+        # TOGGLE LOGIC (Click to open/minimize)
+        def toggle_todo():
+            if todo_app.panel.isVisible():
+                todo_app.panel.hide()
+            else:
+                todo_app.panel.move(todo_icon.x() - todo_app.panel.width() - 10, todo_icon.y())
+                todo_app.panel.show_animated()
+                
+        todo_icon.clicked.connect(toggle_todo)
         
         # Context Menu
         add_icon_context_menu(todo_icon, "todo-it", app, hide_callback=lambda: todo_app.panel.hide())
@@ -385,6 +356,34 @@ def launch_all():
         logger.error(f"❌ Failed to load todo-it: {e}")
         import traceback
         traceback.print_exc()
+
+    # ========== 3.5 CAPTURE-IT (Vision Tool) ==========
+    try:
+        capture_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'capture_it_icon.png'),
+            fallback_letter="📷", 
+            border_color="#ff0000"  # Red
+        )
+        capture_icon.move(RIGHT_X, START_Y + SPACING * 3)
+        capture_icon.show()
+        
+        capture_panel = CapturePanel(capture_icon)
+        
+        def toggle_capture():
+            if capture_panel.isVisible():
+                capture_panel.hide()
+            else:
+                capture_panel.move(capture_icon.x() - capture_panel.width() - 10, capture_icon.y())
+                capture_panel.show()
+                
+        capture_icon.clicked.connect(toggle_capture)
+        add_icon_context_menu(capture_icon, "capture-it", app, hide_callback=lambda: capture_panel.hide())
+        
+        modules.append(("capture-it", capture_icon))
+        logger.info("✅ capture-it loaded")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load capture-it: {e}")
     
     # ========== 4. Voice Input (Global Hotkey + Icon) ==========
     try:
@@ -397,7 +396,13 @@ def launch_all():
             fallback_letter="V",
             border_color="#ff00ff"  # Magenta
         )
-        voice_icon.move(RIGHT_X, START_Y + SPACING * 3)
+        # Create Icon First
+        voice_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'voice_it_icon.png'),
+            fallback_letter="V",
+            border_color="#ff00ff"  # Magenta
+        )
+        voice_icon.move(RIGHT_X, START_Y + SPACING * 4)
         voice_icon.show()
         
         modules.append(("voice-it", voice_icon))
@@ -418,6 +423,27 @@ def launch_all():
                             todo_app.panel.show()
                     except Exception as e:
                         logger.error(f"Failed to route to todo-it: {e}")
+                
+                elif result["target"] == VoiceTarget.READ_IT:
+                    try:
+                        cmd = result["command"]
+                        # Call global speak or read_it component
+                        from shared.voice_output import speak
+                        speak(cmd)
+                        logger.info(f"🔊 Speaking: {cmd}")
+                    except Exception as e:
+                        logger.error(f"Failed to speak: {e}")
+
+                elif "clean" in text.lower() or "storage" in text.lower():
+                    try:
+                        logger.info("🧹 Triggering Drive Cleanup...")
+                        script = os.path.join(PROJECT_ROOT, "scripts", "drive_cleanup.py")
+                        subprocess.Popen([sys.executable, script])
+                        from shared.voice_output import speak
+                        speak("Starting drive cleanup protocol")
+                    except Exception as e:
+                        logger.error(f"Failed to start cleanup: {e}")
+
                 else:
                     try:
                         if tray:
@@ -438,14 +464,22 @@ def launch_all():
             
             vi = init_voice_input(handle_voice, handle_listening)
             
-            # Click to toggle listening
+            # Click to toggle listening (Click = Submit if running)
             def toggle_voice():
                 if vi.is_listening:
-                    vi.cancel_listening()
+                    # User requested 'Click should submit'
+                    # Assuming vi has stop_listening() which processes buffer
+                    if hasattr(vi, 'stop_listening'):
+                        vi.stop_listening()
+                    else:
+                        vi.cancel_listening() # Fallback
                 else:
                     vi._on_hotkey_pressed()
             
             voice_icon.clicked.connect(toggle_voice)
+            
+            # Double Click to Cancel
+            voice_icon.double_clicked.connect(lambda: vi.cancel_listening() if vi.is_listening else None)
             
             # --- Bonus Hotkeys ---
             try:
@@ -462,6 +496,34 @@ def launch_all():
             
     except Exception as e:
         logger.warning(f"⚠️ Voice input setup failed: {e}")
+    
+    # ========== 5. SHED-IT (The Repository) ==========
+    try:
+        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'floater', 'shed_it'))
+        from main import ShedItApp
+        
+        shed_app = ShedItApp()
+        
+        shed_icon = ModuleIcon(
+            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'shed_it_icon.png'),
+            fallback_letter="S",
+            border_color="#8888aa"  # Grey/Silver
+        )
+        shed_icon.move(RIGHT_X, START_Y + SPACING * 1)
+        shed_icon.show()
+        
+        shed_icon.clicked.connect(lambda: shed_app.show() or shed_app.raise_())
+        
+        # Context Menu
+        add_icon_context_menu(shed_icon, "shed-it", app, hide_callback=lambda: shed_app.hide())
+        
+        modules.append(("shed-it", shed_icon))
+        logger.info("✅ shed-it loaded")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load shed-it: {e}")
+        import traceback
+        traceback.print_exc()
     
     # ========== Summary ==========
     logger.info(f"🎯 Launched {len(modules)} modules:")
@@ -483,20 +545,27 @@ def launch_all():
         ("read", os.path.join(PROJECT_ROOT, "read-it", "ipc_handler.py")),
         ("browser", os.path.join(PROJECT_ROOT, "agents", "browser", "ipc_handler.py")),
         ("brain", os.path.join(PROJECT_ROOT, "agents", "brain", "ipc_handler.py")),
+        ("systems_engineer", os.path.join(PROJECT_ROOT, "agents", "systems_engineer", "monitor.py")),
+        ("dump-it", r"D:\iiWiiOperate-it_System\dump-it.py"),
         # ("desktop", os.path.join(PROJECT_ROOT, "agents", "desktop", "ipc_handler.py")),  # Needs pyautogui
     ]
+    
+    # Determine which Python to use (prefer the .venv)
+    venv_python = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
     
     for name, script in agent_scripts:
         if os.path.exists(script):
             try:
                 proc = subprocess.Popen(
-                    [sys.executable, script],
+                    [python_exe, script],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 )
                 agent_processes.append((name, proc))
-                logger.info(f"✅ Started {name} agent (PID: {proc.pid})")
+                logger.info(f"✅ Started {name} agent (PID: {proc.pid}) using {python_exe}")
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to start {name} agent: {e}")
     
