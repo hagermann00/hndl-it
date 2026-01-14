@@ -489,6 +489,14 @@ def launch_all():
                 logger.info("✅ Native Dictation shortcut (Ctrl+Win+Alt -> Win+H) active")
             except Exception as e:
                 logger.warning(f"Failed to register native hotkeys: {e}")
+            
+            # --- TTS Hotkeys (Middle-click + Ctrl+Alt+Win for speaking selected text) ---
+            try:
+                from shared.tts_hotkeys import register_tts_hotkeys
+                register_tts_hotkeys()
+                logger.info("✅ TTS Hotkeys active (Middle-click, Ctrl+Alt+Win)")
+            except Exception as e:
+                logger.warning(f"Failed to register TTS hotkeys: {e}")
 
             logger.info("✅ Voice input ready (Ctrl+Shift+Win or Click Icon)")
         else:

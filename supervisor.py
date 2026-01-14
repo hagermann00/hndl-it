@@ -40,6 +40,8 @@ def main():
     venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
     python_exe = venv_python if os.path.exists(venv_python) else sys.executable
     
+    suite_script = os.path.join(base_dir, "launch_suite.py")
+    
     logger.info(f"🚀 Launching Unified Suite using {python_exe}...")
     
     # Launch the Suite
