@@ -1,20 +1,20 @@
 """
 hndl-it Suite Launcher
 Launches all floating module icons in a vertical dock on the right side.
-
-Modules:
-- hndl-it (main router)
-- read-it (TTS reader)
-- todo-it (task manager)
+Refactored for modularity and plug-and-play architecture.
 """
 
 import sys
 import os
 import logging
+import subprocess
+import atexit
+from typing import List, Dict, Any, Optional
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, PROJECT_ROOT)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from PyQt6.QtWidgets import QApplication, QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF, QThread
@@ -27,98 +27,66 @@ logging.basicConfig(
 logger = logging.getLogger("hndl-it.launcher")
 
 # ============================================================================
-# SINGLETON CHECK - Prevent multiple instances
+# CONFIGURATION
 # ============================================================================
 LOCK_FILE = os.path.join(PROJECT_ROOT, "launch_suite.lock")
 
-def check_singleton():
-    """Fail-safe singleton check. Returns True if we can proceed, False if already running."""
+# ============================================================================
+# UTILITIES
+# ============================================================================
+def check_singleton() -> bool:
+    """Fail-safe singleton check."""
     try:
         import psutil
-        
         if os.path.exists(LOCK_FILE):
             try:
                 with open(LOCK_FILE, 'r') as f:
                     pid = int(f.read().strip())
-                
                 if psutil.pid_exists(pid):
-                    # Check if it's actually a Python process running launch_suite
+                     # Check command line to be sure
                     try:
                         proc = psutil.Process(pid)
-                        cmdline = ' '.join(proc.cmdline())
-                        if 'launch_suite' in cmdline:
-                            logger.error(f"⛔ Suite already running (PID {pid}). Exiting.")
+                        if 'launch_suite' in ' '.join(proc.cmdline()):
+                            logger.error(f"⛔ Suite already running (PID {pid}).")
                             return False
                     except:
-                        pass  # Process exists but we can't read it, assume stale
+                        pass
             except:
-                pass  # Stale or corrupt lock file
-        
-        # Write our PID
+                pass
         with open(LOCK_FILE, 'w') as f:
             f.write(str(os.getpid()))
-        
         return True
-        
     except Exception as e:
-        logger.warning(f"Singleton check failed (proceeding anyway): {e}")
-        return True  # Fail-safe: if check fails, allow launch
+        logger.warning(f"Singleton check warning: {e}")
+        return True
 
 def cleanup_lock():
-    """Remove lock file on exit."""
     try:
         if os.path.exists(LOCK_FILE):
             os.remove(LOCK_FILE)
     except:
         pass
 
+def get_python_exe():
+    """Get the best available python executable."""
+    venvs = [
+        os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe"),
+        os.path.join(PROJECT_ROOT, ".venv", "bin", "python"),
+    ]
+    for path in venvs:
+        if os.path.exists(path):
+            return path
+    return sys.executable
 
 # ============================================================================
-# CONTEXT MENU HELPER - Adds right-click menu to any icon
-# ============================================================================
-def add_icon_context_menu(icon, module_name, app, hide_callback=None):
-    """
-    Add right-click context menu to an icon with:
-    - Hide [Module] (if hide_callback provided)
-    - Restart Suite
-    - Close Suite
-    """
-    icon.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-    
-    def show_menu(pos):
-        menu = QMenu()
-        
-        # Hide option (if callback provided)
-        if hide_callback:
-            hide_action = QAction(f"👁️ Hide {module_name}", icon)
-            hide_action.triggered.connect(hide_callback)
-            menu.addAction(hide_action)
-            menu.addSeparator()
-        
-        # Restart Suite
-        restart_action = QAction("♻️ Restart Suite", icon)
-        restart_action.triggered.connect(lambda: os.execl(sys.executable, sys.executable, *sys.argv))
-        menu.addAction(restart_action)
-        
-        # Close Suite
-        close_action = QAction("❌ Close Suite", icon)
-        close_action.triggered.connect(app.quit)
-        menu.addAction(close_action)
-        
-        menu.exec(icon.mapToGlobal(pos))
-    
-    icon.customContextMenuRequested.connect(show_menu)
-
-
-# ============================================================================
-# GENERIC FLOATING ICON - Reusable for all modules
+# UI COMPONENTS
 # ============================================================================
 class ModuleIcon(QWidget):
     """Generic floating icon for any module."""
     clicked = pyqtSignal()
     double_clicked = pyqtSignal()
     
-    def __init__(self, icon_path: str = None, fallback_letter: str = "?", border_color: str = "#e67e22"):
+    def __init__(self, icon_name: str, fallback_letter: str = "?", border_color: str = "#e67e22"):
         super().__init__()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -130,7 +98,7 @@ class ModuleIcon(QWidget):
         self.size_val = 70
         self.setFixedSize(self.size_val, self.size_val)
         
-        self.icon_path = icon_path
+        self.icon_path = os.path.join(PROJECT_ROOT, 'floater', 'assets', icon_name)
         self.fallback_letter = fallback_letter
         self.border_color = border_color
         
@@ -142,17 +110,15 @@ class ModuleIcon(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        if self.icon_path and os.path.exists(self.icon_path):
+        # Draw Icon if exists
+        if os.path.exists(self.icon_path):
             pixmap = QPixmap(self.icon_path)
-            
             if not pixmap.isNull():
-                # Draw circular clipped icon
                 path = QPainterPath()
                 path.addEllipse(0.0, 0.0, float(self.width()), float(self.height()))
                 painter.setClipPath(path)
                 painter.drawPixmap(self.rect(), pixmap)
                 
-                # Draw border
                 painter.setClipping(False)
                 pen = QPen(QColor(self.border_color))
                 pen.setWidth(3)
@@ -161,7 +127,7 @@ class ModuleIcon(QWidget):
                 painter.drawEllipse(3, 3, self.width()-6, self.height()-6)
                 return
 
-        # Fallback gradient circle (if path missing or image invalid)
+        # Fallback
         cx = self.width() / 2.0
         cy = self.height() / 2.0
         gradient = QRadialGradient(cx, cy, self.width() / 2.0)
@@ -183,7 +149,6 @@ class ModuleIcon(QWidget):
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.fallback_letter)
 
-    
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -203,175 +168,136 @@ class ModuleIcon(QWidget):
     def mouseDoubleClickEvent(self, event):
         self.double_clicked.emit()
 
+def add_context_menu(icon, name, app, hide_callback=None):
+    icon.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+    def show(pos):
+        menu = QMenu()
+        if hide_callback:
+            menu.addAction(f"👁️ Hide {name}", hide_callback)
+            menu.addSeparator()
 
-def launch_all():
-    """Launch all modules with stacked floating icons."""
-    
-    # Singleton check - prevent duplicate instances
-    if not check_singleton():
-        logger.error("Aborting: Another instance is already running.")
-        sys.exit(1)
-    
-    logger.info("🚀 Starting hndl-it Suite...")
-    
-    app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    
-    # Register cleanup on exit
-    import atexit
-    atexit.register(cleanup_lock)
-    
-    screen_geo = app.primaryScreen().availableGeometry()
-    RIGHT_X = screen_geo.width() - 80
-    START_Y = 290
-    SPACING = 90
-    
-    modules = []
-    
-    # ========== 1. HNDL-IT (Main Router) ==========
-    try:
-        from floater.tray import FloaterTray
-        from floater.console import ConsoleWindow
-        from floater.capture_tool import CapturePanel
-        
-        console = ConsoleWindow()
-        tray = FloaterTray(app)
-        tray.console_window = console
-        
-        hndl_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'hndl_it_icon.png'),
-            fallback_letter="H",
-            border_color="#00d4ff"  # Cyan
-        )
-        hndl_icon.move(RIGHT_X, START_Y)
-        hndl_icon.show()
-        
-        # Context Menu for Restart/Close
-        add_icon_context_menu(hndl_icon, "hndl-it", app, hide_callback=lambda: tray.quick_dialog.hide())
-        
-        def toggle_hndl_input():
-            if tray.quick_dialog.isVisible():
-                tray.quick_dialog.hide()
-            else:
-                geo = hndl_icon.geometry()
-                dialog_w = tray.quick_dialog.width()
-                dialog_h = tray.quick_dialog.height()
-                
-                # Magnetic attachment: Right edge of dialog touches Left edge of icon
-                x = geo.left() - dialog_w
-                # Center vertically relative to icon
-                y = geo.center().y() - (dialog_h // 2)
-                
-                # Debug logging
-                logger.info(f"📍 Input Bar Positioning:")
-                logger.info(f"   Icon geometry: {geo.x()}, {geo.y()}, {geo.width()}x{geo.height()}")
-                logger.info(f"   Dialog size: {dialog_w}x{dialog_h}")
-                logger.info(f"   Calculated position: ({x}, {y})")
-                
-                if x < 0:
-                    x = geo.right() + 10
-                    logger.info(f"   Adjusted X (off-screen fix): {x}")
-                
-                tray.quick_dialog.move(x, y)
-                tray.quick_dialog.show()
-                tray.quick_dialog.activateWindow()
-                tray.quick_dialog.input.setFocus()
-        
-        hndl_icon.clicked.connect(toggle_hndl_input)
-        hndl_icon.double_clicked.connect(lambda: console.show() or console.raise_())
-        
-        modules.append(("hndl-it", hndl_icon))
-        logger.info("✅ hndl-it loaded")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to load hndl-it: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # ========== 2. READ-IT (TTS Reader) ==========
-    try:
-        sys.path.insert(0, PROJECT_ROOT)
-        from reading_pill import ReadingPill
-        
-        pill = ReadingPill()
-        
-        read_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'read_it_icon.png'),
-            fallback_letter="R",
-            border_color="#00d4ff" # Cyan
-        )
-        # Position at Slot 5 (0=Hndl, 1=Shed, 2=Todo, 3=Capture, 4=Voice, 5=Read)
-        read_icon.move(RIGHT_X, START_Y + SPACING * 5)
-        read_icon.show()
-        
-        def toggle_read():
-            if pill.isVisible():
-                pill.hide()
-            else:
-                pill.show()
-                
-        read_icon.clicked.connect(toggle_read)
-        
-        add_icon_context_menu(read_icon, "read-it", app, hide_callback=lambda: pill.hide())
-        modules.append(("read-it", read_icon))
-        logger.info("✅ read-it loaded")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to load read-it: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # ========== 3. TODO-IT (Task Manager) ==========
-    try:
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'todo-it'))
-        from main import TodoItApp
-        
-        todo_app = TodoItApp()
-        
-        todo_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'todo_it_icon.png'),
-            fallback_letter="T",
-            border_color="#00ff88"  # Green
-        )
-        todo_icon.move(RIGHT_X, START_Y + SPACING * 2)
-        todo_icon.show()
-        
-        # TOGGLE LOGIC (Click to open/minimize)
-        def toggle_todo():
-            if todo_app.panel.isVisible():
-                todo_app.panel.hide()
-            else:
-                todo_app.panel.move(todo_icon.x() - todo_app.panel.width() - 10, todo_icon.y())
-                todo_app.panel.show_animated()
-                
-        todo_icon.clicked.connect(toggle_todo)
-        
-        # Context Menu
-        add_icon_context_menu(todo_icon, "todo-it", app, hide_callback=lambda: todo_app.panel.hide())
-        
-        modules.append(("todo-it", todo_icon))
-        logger.info("✅ todo-it loaded")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to load todo-it: {e}")
-        import traceback
-        traceback.print_exc()
+        menu.addAction("♻️ Restart Suite", lambda: os.execl(sys.executable, sys.executable, *sys.argv))
+        menu.addAction("❌ Close Suite", app.quit)
+        menu.exec(icon.mapToGlobal(pos))
+    icon.customContextMenuRequested.connect(show)
 
-    # ========== 3.5 CAPTURE-IT (Vision Tool) ==========
+
+# ============================================================================
+# MODULE INITIALIZERS
+# ============================================================================
+def init_hndl_it(app, icon):
+    from floater.tray import FloaterTray
+    from floater.console import ConsoleWindow
+    
+    console = ConsoleWindow()
+    tray = FloaterTray(app)
+    tray.console_window = console
+    
+    add_context_menu(icon, "hndl-it", app, lambda: tray.quick_dialog.hide())
+    
+    def toggle():
+        if tray.quick_dialog.isVisible():
+            tray.quick_dialog.hide()
+        else:
+            geo = icon.geometry()
+            tray.quick_dialog.move(
+                geo.left() - tray.quick_dialog.width(),
+                geo.center().y() - (tray.quick_dialog.height() // 2)
+            )
+            tray.quick_dialog.show()
+            tray.quick_dialog.activateWindow()
+            tray.quick_dialog.input.setFocus()
+
+    icon.clicked.connect(toggle)
+    icon.double_clicked.connect(lambda: console.show() or console.raise_())
+    return tray # Return main obj if needed
+
+def init_read_it(app, icon):
+    sys.path.insert(0, PROJECT_ROOT)
+    from reading_pill import ReadingPill
+    pill = ReadingPill()
+    add_context_menu(icon, "read-it", app, lambda: pill.hide())
+    icon.clicked.connect(lambda: pill.hide() if pill.isVisible() else pill.show())
+
+def init_todo_it(app, icon):
+    sys.path.insert(0, os.path.join(PROJECT_ROOT, 'todo-it'))
+    from main import TodoItApp
+    todo = TodoItApp()
+    add_context_menu(icon, "todo-it", app, lambda: todo.panel.hide())
+    
+    def toggle():
+        if todo.panel.isVisible():
+            todo.panel.hide()
+        else:
+            todo.panel.move(icon.x() - todo.panel.width() - 10, icon.y())
+            todo.panel.show_animated()
+    icon.clicked.connect(toggle)
+    return todo
+
+def init_capture_it(app, icon):
+    from floater.capture_it.main import CapturePanel
+    panel = CapturePanel(icon)
+    add_context_menu(icon, "capture-it", app, lambda: panel.hide())
+    
+    def toggle():
+        if panel.isVisible():
+            panel.hide()
+        else:
+            panel.move(icon.x() - panel.width() - 10, icon.y())
+            panel.show()
+    icon.clicked.connect(toggle)
+
+def init_voice_it(app, icon):
+    from shared.voice_input import init_voice_input, VOICE_AVAILABLE
+    from shared.voice_router import parse_voice_command, VoiceTarget
+    
+    add_context_menu(icon, "voice-it", app)
+    
+    if not VOICE_AVAILABLE:
+        logger.warning("Voice unavailable")
+        return
+
+    # Helper to route voice commands (needs access to other modules instances effectively)
+    # Ideally, this should use IPC broadcast, but for now we hook locally if possible
+    # or rely on IPC handlers in other processes.
+    
+    def handle_voice(text):
+        logger.info(f"🎤 Voice: {text}")
+        result = parse_voice_command(text)
+        # For now, just logging or basic IPC could go here.
+        # The previous implementation had direct object references.
+        # We will use IPC for robustness.
+        from shared.ipc import route_intent
+        # Mock intent
+        route_intent({"target": result["target"], "action": "voice_command", "params": result})
+        
+    def handle_state(listening):
+        icon.border_color = "#ff0000" if listening else "#ff00ff"
+        icon.update()
+        
+    vi = init_voice_input(handle_voice, handle_state)
+    
+    icon.clicked.connect(lambda: vi.stop_listening() if vi.is_listening else vi._on_hotkey_pressed())
+    icon.double_clicked.connect(lambda: vi.cancel_listening() if vi.is_listening else None)
+
+def init_shed_it(app, icon):
+    sys.path.insert(0, os.path.join(PROJECT_ROOT, 'floater', 'shed_it'))
+    from main import ShedItApp
+    shed = ShedItApp()
+    add_context_menu(icon, "shed-it", app, lambda: shed.hide())
+    icon.clicked.connect(lambda: shed.show() or shed.raise_())
+
+def init_timer_it(app, icon):
+    # Dynamic load for new module
     try:
-        capture_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'capture_it_icon.png'),
-            fallback_letter="📷", 
-            border_color="#ff0000"  # Red
-        )
-        capture_icon.move(RIGHT_X, START_Y + SPACING * 3)
-        capture_icon.show()
+        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'floater', 'timer_it'))
+        from main import TimerApp
+        timer = TimerApp()
+        add_context_menu(icon, "timer-it", app, lambda: timer.hide())
         
-        capture_panel = CapturePanel(capture_icon)
-        
-        def toggle_capture():
-            if capture_panel.isVisible():
-                capture_panel.hide()
+        def toggle():
+            if timer.panel.isVisible():
+                timer.panel.hide()
             else:
                 capture_panel.move(capture_icon.x() - capture_panel.width() - 10, capture_icon.y())
                 capture_panel.show()
@@ -497,98 +423,101 @@ def launch_all():
                 logger.info("✅ TTS Hotkeys active (Middle-click, Ctrl+Alt+Win)")
             except Exception as e:
                 logger.warning(f"Failed to register TTS hotkeys: {e}")
+                timer.panel.move(icon.x() - timer.panel.width() - 10, icon.y())
+                timer.panel.show()
+        icon.clicked.connect(toggle)
+    except ImportError:
+        logger.warning("timer-it not found yet")
 
-            logger.info("✅ Voice input ready (Ctrl+Shift+Win or Click Icon)")
-        else:
-            logger.warning("⚠️ Voice input unavailable")
-            
-    except Exception as e:
-        logger.warning(f"⚠️ Voice input setup failed: {e}")
+
+# ============================================================================
+# MAIN LAUNCHER
+# ============================================================================
+def launch_all():
+    if not check_singleton():
+        sys.exit(1)
     
-    # ========== 5. SHED-IT (The Repository) ==========
-    try:
-        sys.path.insert(0, os.path.join(PROJECT_ROOT, 'floater', 'shed_it'))
-        from main import ShedItApp
-        
-        shed_app = ShedItApp()
-        
-        shed_icon = ModuleIcon(
-            icon_path=os.path.join(PROJECT_ROOT, 'floater', 'assets', 'shed_it_icon.png'),
-            fallback_letter="S",
-            border_color="#8888aa"  # Grey/Silver
-        )
-        shed_icon.move(RIGHT_X, START_Y + SPACING * 1)
-        shed_icon.show()
-        
-        shed_icon.clicked.connect(lambda: shed_app.show() or shed_app.raise_())
-        
-        # Context Menu
-        add_icon_context_menu(shed_icon, "shed-it", app, hide_callback=lambda: shed_app.hide())
-        
-        modules.append(("shed-it", shed_icon))
-        logger.info("✅ shed-it loaded")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to load shed-it: {e}")
-        import traceback
-        traceback.print_exc()
+    atexit.register(cleanup_lock)
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     
-    # ========== Summary ==========
-    logger.info(f"🎯 Launched {len(modules)} modules:")
-    for name, widget in modules:
-        logger.info(f"   - {name} at ({widget.x()}, {widget.y()})")
+    screen = app.primaryScreen().availableGeometry()
+    RIGHT_X = screen.width() - 80
+    START_Y = 200
+    SPACING = 90
     
-    logger.info("=" * 50)
-    logger.info("hndl-it Suite Ready!")
-    logger.info("  • Click icons to interact")
-    logger.info("  • Win+Alt for voice commands")
-    logger.info("  • Right-click tray for menu")
-    logger.info("=" * 50)
+    # MODULE REGISTRY
+    MODULES = [
+        {"id": "hndl-it", "icon": "hndl_it_icon.png", "l": "H", "c": "#00d4ff", "init": init_hndl_it},
+        {"id": "shed-it", "icon": "shed_it_icon.png", "l": "S", "c": "#8888aa", "init": init_shed_it},
+        {"id": "todo-it", "icon": "todo_it_icon.png", "l": "T", "c": "#00ff88", "init": init_todo_it},
+        {"id": "capture", "icon": "capture_it_icon.png", "l": "📷", "c": "#ff0000", "init": init_capture_it},
+        {"id": "voice",   "icon": "voice_it_icon.png", "l": "V", "c": "#ff00ff", "init": init_voice_it},
+        {"id": "read-it", "icon": "read_it_icon.png", "l": "R", "c": "#00d4ff", "init": init_read_it},
+        {"id": "timer",   "icon": "timer_it_icon.png", "l": "⏱️", "c": "#ffaa00", "init": init_timer_it},
+    ]
     
-    # ========== Start Agent Handlers ==========
-    import subprocess
-    agent_processes = []
+    launched_widgets = []
     
+    for i, mod in enumerate(MODULES):
+        try:
+            icon = ModuleIcon(mod["icon"], mod["l"], mod["c"])
+            icon.move(RIGHT_X, START_Y + (SPACING * i))
+            icon.show()
+
+            # Initialize module logic
+            if mod["init"]:
+                mod["init"](app, icon)
+
+            launched_widgets.append(icon) # Keep ref
+            logger.info(f"✅ Loaded {mod['id']}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to load {mod['id']}: {e}")
+
+    # BACKGROUND AGENTS
     agent_scripts = [
         ("read", os.path.join(PROJECT_ROOT, "read-it", "ipc_handler.py")),
         ("browser", os.path.join(PROJECT_ROOT, "agents", "browser", "ipc_handler.py")),
         ("brain", os.path.join(PROJECT_ROOT, "agents", "brain", "ipc_handler.py")),
-        ("systems_engineer", os.path.join(PROJECT_ROOT, "agents", "systems_engineer", "monitor.py")),
-        ("dump-it", r"D:\iiWiiOperate-it_System\dump-it.py"),
-        # ("desktop", os.path.join(PROJECT_ROOT, "agents", "desktop", "ipc_handler.py")),  # Needs pyautogui
+        ("worker", os.path.join(PROJECT_ROOT, "agents", "worker", "ipc_handler.py")),
+        ("systems", os.path.join(PROJECT_ROOT, "agents", "systems_engineer", "monitor.py")),
     ]
     
-    # Determine which Python to use (prefer the .venv)
-    venv_python = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
-    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
+    # Check for local dump-it if exists
+    local_dump = os.path.join(PROJECT_ROOT, "floater", "dump_it", "dump_agent.py")
+    if os.path.exists(local_dump):
+        agent_scripts.append(("dump-it", local_dump))
+
+    python_exe = get_python_exe()
+    agent_procs = []
     
     for name, script in agent_scripts:
         if os.path.exists(script):
             try:
-                proc = subprocess.Popen(
-                    [python_exe, script],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                )
-                agent_processes.append((name, proc))
-                logger.info(f"✅ Started {name} agent (PID: {proc.pid}) using {python_exe}")
+                # Platform specific creation flags for hidden window
+                flags = 0
+                if sys.platform == "win32":
+                    flags = subprocess.CREATE_NO_WINDOW
 
+                p = subprocess.Popen([python_exe, script],
+                                   creationflags=flags,
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                agent_procs.append(p)
+                logger.info(f"🤖 Agent started: {name}")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to start {name} agent: {e}")
-    
-    # Cleanup agents on exit
-    import atexit
-    def cleanup_agents():
-        for name, proc in agent_processes:
+                logger.error(f"⚠️ Agent failed: {name} - {e}")
+
+    def kill_agents():
+        for p in agent_procs:
             try:
-                proc.terminate()
+                p.terminate()
             except:
                 pass
-    atexit.register(cleanup_agents)
+    atexit.register(kill_agents)
     
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     launch_all()

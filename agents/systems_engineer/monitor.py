@@ -7,6 +7,7 @@ Responsibilities:
 2. Resource usage monitoring (CPU, RAM, VRAM)
 3. Log analysis for error patterns ("Archive Worm" logic)
 4. Auto-optimization suggestions
+5. ZOMBIE HUNTER: Detects runaway processes and summons MEDIC
 
 Usage:
     Run as a background process: python agents/systems_engineer/monitor.py
@@ -29,8 +30,14 @@ sys.path.insert(0, PROJECT_ROOT)
 from shared.ipc import send_command, broadcast
 
 # Configuration
-CHECK_INTERVAL_SECONDS = 300  # 5 minutes
+CHECK_INTERVAL_SECONDS = 60  # Check every 1 minute now for faster response
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+
+# Zombie Hunter Config
+ENABLE_ZOMBIE_HUNTER = False  # Disabled by default, can be enabled by user/config
+MAX_CPU_PERCENT = 90.0
+MAX_DURATION_HIGH_CPU = 300  # 5 minutes
+PROTECTED_PROCESSES = ["supervisor.py", "monitor.py", "launch_suite.py"]
 
 # Setup logging
 if not os.path.exists(LOG_DIR):
@@ -56,6 +63,8 @@ class SystemsEngineer:
     def __init__(self):
         self.running = True
         self.last_check = 0
+        self.high_cpu_tracker = {}  # {pid: start_time}
+        self.process_cache = {} # {pid: psutil.Process}
         self.warnings = []
 
     def start(self):
@@ -85,8 +94,8 @@ class SystemsEngineer:
         resources = self._check_resources()
         logger.info(f"Resources: {resources}")
         
-        # 2. Process Status
-        processes = self._check_processes()
+        # 2. Process Status & Zombie Hunting
+        processes = self._check_processes_and_hunt_zombies()
         
         # 3. Log Analysis (Archive Worm)
         log_issues = self._scan_logs()
@@ -120,27 +129,111 @@ class SystemsEngineer:
             "gpu": gpu_info
         }
 
-    def _check_processes(self) -> List[Dict]:
-        """Check status of key hndl-it processes."""
+    def _check_processes_and_hunt_zombies(self) -> List[Dict]:
+        """Check status of key hndl-it processes and hunt zombies."""
         key_processes = ["launch_suite.py", "orchestrator", "monitor.py"]
         found = []
+        current_pids = set()
         
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        # Iterate all PIDs
+        for pid in psutil.pids():
             try:
-                cmdline = proc.info['cmdline']
-                if cmdline:
+                # Use cached process object if possible to keep CPU stats
+                if pid in self.process_cache:
+                    proc = self.process_cache[pid]
+                else:
+                    proc = psutil.Process(pid)
+                    self.process_cache[pid] = proc
+
+                # Check if process is still alive
+                if not proc.is_running():
+                    del self.process_cache[pid]
+                    continue
+
+                # Filter for only relevant processes (Python)
+                try:
+                    name = proc.name()
+                    cmdline = proc.cmdline()
                     cmd_str = ' '.join(cmdline)
-                    for kp in key_processes:
-                        if kp in cmd_str:
-                            found.append({
-                                "name": kp,
-                                "pid": proc.info['pid'],
-                                "status": proc.status()
-                            })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+                current_pids.add(pid)
+
+                # 1. Identify key processes
+                for kp in key_processes:
+                    if kp in cmd_str:
+                        found.append({
+                            "name": kp,
+                            "pid": pid,
+                            "status": proc.status()
+                        })
+
+                # 2. Zombie Hunting (if enabled)
+                if ENABLE_ZOMBIE_HUNTER and "python" in name.lower():
+                    # Call cpu_percent.
+                    cpu = proc.cpu_percent(interval=None)
+
+                    if cpu > MAX_CPU_PERCENT:
+                        # Start tracking if not already
+                        if pid not in self.high_cpu_tracker:
+                            self.high_cpu_tracker[pid] = time.time()
+                            logger.info(f"detected potential zombie {pid} with {cpu}% cpu")
+                        else:
+                            # Check duration
+                            duration = time.time() - self.high_cpu_tracker[pid]
+                            logger.info(f"tracking zombie {pid}: {duration:.1f}s > {MAX_DURATION_HIGH_CPU}s @ {cpu}%")
+                            if duration > MAX_DURATION_HIGH_CPU:
+                                self._summon_medic(pid, cmd_str, duration, cpu)
+                    else:
+                        # Cooled down, remove from tracker
+                        if pid in self.high_cpu_tracker:
+                            del self.high_cpu_tracker[pid]
+
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+                if pid in self.process_cache:
+                    del self.process_cache[pid]
+                continue
+
+        # Cleanup cache for dead processes
+        for cached_pid in list(self.process_cache.keys()):
+            if cached_pid not in current_pids:
+                del self.process_cache[cached_pid]
+
+        # Cleanup tracker for dead processes
+        for tracked_pid in list(self.high_cpu_tracker.keys()):
+            if tracked_pid not in current_pids:
+                del self.high_cpu_tracker[tracked_pid]
                 
         return found
+
+    def _summon_medic(self, pid, cmd_name, duration, cpu):
+        """Summon the Medic agent to deal with the zombie."""
+        # Safety Check: Don't kill protected processes
+        for safe in PROTECTED_PROCESSES:
+            if safe in cmd_name:
+                logger.warning(f"⚠️ Cannot kill protected process {safe} (PID {pid}) despite high load.")
+                return
+
+        logger.info(f"🚑 SUMMONING MEDIC for PID {pid} ({cmd_name}) - {duration:.0f}s @ {cpu}% CPU")
+
+        try:
+            medic_script = os.path.join(PROJECT_ROOT, "agents", "medic", "medic_agent.py")
+            if not os.path.exists(medic_script):
+                logger.error("Medic agent script not found!")
+                return
+
+            # Launch Medic as a subprocess
+            subprocess.Popen([sys.executable, medic_script, str(pid), cmd_name, str(cpu), str(duration)])
+
+            # Notify user
+            send_command("floater", "display", {
+                "type": "warning",
+                "message": f"🚑 Medic dispatched for stuck process (PID {pid})"
+            })
+
+        except Exception as e:
+            logger.error(f"Failed to summon medic: {e}")
 
     def _scan_logs(self) -> List[str]:
         """Scan recent log files for ERROR patterns."""

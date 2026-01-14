@@ -5,117 +5,140 @@ Routes responses back to floater for display.
 
 import sys
 import os
-import time
-import logging
-import requests
+from ollama import Client
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, PROJECT_ROOT)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-from shared.ipc import check_mailbox, send_command
-from shared.llm_config import ACTIVE_ROLES
+from shared.agent_base import BaseAgent
+from shared.ipc import send_command
+from shared.llm_config import ACTIVE_ROLES, get_ollama_host
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("hndl-it.brain")
-
-
-class BrainAgent:
-    """Uses Qwen 3B to answer questions."""
+class BrainAgent(BaseAgent):
+    """
+    Uses LLM (e.g. Qwen) to answer questions.
+    Inherits robustness from BaseAgent.
+    """
     
     def __init__(self):
+        super().__init__("brain")
         self.model = ACTIVE_ROLES.get("brain", "qwen2.5:3b")
-        self.api_url = "http://localhost:11434/api/generate"
-        logger.info(f"Brain Agent initialized with model: {self.model}")
+        host = get_ollama_host()
+        self.client = Client(host=host, timeout=30) # Increased timeout for brain
+        self.logger.info(f"🧠 Brain Agent initialized (Model: {self.model}, Host: {host})")
     
-    def answer(self, question: str) -> str:
-        """Generate an answer to a question."""
+    def process_action(self, action: str, payload: dict):
+        """Handle incoming brain actions."""
+        if action in ("answer", "ask", "query", "question"):
+            self._handle_answer(payload)
+        elif action == "summarize":
+            self._handle_summarize(payload)
+        elif action == "analyze_image":
+            self._handle_image_analysis(payload)
+        else:
+            self.logger.warning(f"Unknown action: {action}")
+
+    def _handle_answer(self, payload: dict):
+        question = payload.get("question") or payload.get("query") or payload.get("input", "")
+        if not question:
+            return
+
+        self.logger.info(f"🤔 Thinking about: {question}")
+
         prompt = f"""You are a helpful assistant. Answer this question concisely:
 
 Question: {question}
 
 Answer:"""
         
+        answer = self._generate(prompt)
+
+        self.logger.info(f"💡 Answer: {answer[:100]}...")
+        send_command("floater", "display", {
+            "type": "answer",
+            "question": question,
+            "answer": answer
+        })
+
+    def _handle_summarize(self, payload: dict):
+        text = payload.get("text", "")
+        if not text:
+            return
+
+        self.logger.info(f"📝 Summarizing text ({len(text)} chars)...")
+        prompt = f"""Summarize the following text in 3 bullet points:
+
+{text[:2000]}
+
+Summary:"""
+
+        summary = self._generate(prompt)
+        send_command("floater", "display", {
+            "type": "answer",
+            "question": "Summary",
+            "answer": summary
+        })
+
+    def _handle_image_analysis(self, payload: dict):
+        image_b64 = payload.get("image")
+        prompt = payload.get("prompt", "Describe this image.")
+
+        if not image_b64:
+            self.logger.warning("No image data provided for analysis")
+            return
+
+        self.logger.info(f"👁️ Analyzing image... Prompt: {prompt}")
+
+        # Use _generate but with image support
+        # We need to make sure _generate supports images or call client directly
         try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_ctx": 512,
-                        "num_predict": 150
-                    }
-                },
-                timeout=15
+            # Check if model supports vision?
+            # Ideally we might swap model to 'llava' or 'llama3.2-vision' if current is text-only
+            # For now assuming the user has a multimodal model loaded or the current one works
+
+            # Using client directly to pass images
+            response = self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                images=[image_b64],
+                stream=False
             )
-            
-            if response.status_code == 200:
-                answer = response.json().get("response", "").strip()
-                return answer if answer else "I couldn't generate an answer."
-            else:
-                return f"LLM error: {response.status_code}"
-                
-        except requests.exceptions.Timeout:
-            return "Request timed out. Try a simpler question."
+            answer = response.get("response", "").strip()
+
+            self.logger.info(f"💡 Vision Result: {answer[:100]}...")
+
+            send_command("floater", "display", {
+                "type": "answer",
+                "question": "Vision Analysis",
+                "answer": answer
+            })
+
         except Exception as e:
-            logger.error(f"Brain error: {e}")
+            self.logger.error(f"Vision analysis failed: {e}")
+            send_command("floater", "display", {
+                "type": "error",
+                "message": f"Vision analysis failed: {e}"
+            })
+
+    def _generate(self, prompt: str) -> str:
+        try:
+            response = self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                stream=False,
+                options={
+                    "temperature": 0.7,
+                    "num_ctx": 1024,
+                    "num_predict": 256
+                }
+            )
+            return response.get("response", "").strip() or "I couldn't generate an answer."
+        except Exception as e:
+            self.logger.error(f"Generation error: {e}")
             return f"Error: {e}"
 
-
-def main():
-    """Run brain agent IPC handler."""
-    logger.info("🧠 Brain Agent starting...")
-    
-    brain = BrainAgent()
-    
-    try:
-        while True:
-            # Check for questions
-            action, payload = check_mailbox("brain")
-            
-            if action:
-                logger.info(f"📥 Received: {action} - {payload}")
-                
-                try:
-                    if action in ("answer", "ask", "query", "question"):
-                        question = payload.get("question") or payload.get("query") or payload.get("input", "")
-                        
-                        if question:
-                            logger.info(f"🤔 Thinking about: {question}")
-                            answer = brain.answer(question)
-                            logger.info(f"💡 Answer: {answer[:100]}...")
-                            
-                            # Send response back to floater
-                            send_command("floater", "display", {
-                                "type": "answer",
-                                "question": question,
-                                "answer": answer
-                            })
-                        
-                    elif action == "quit":
-                        logger.info("Shutting down...")
-                        break
-                        
-                    else:
-                        logger.warning(f"Unknown action: {action}")
-                        
-                except Exception as e:
-                    logger.error(f"Error: {e}")
-                    send_command("floater", "display", {
-                        "type": "error",
-                        "message": str(e)
-                    })
-            
-            time.sleep(0.5)
-            
-    except KeyboardInterrupt:
-        logger.info("Interrupted")
-    finally:
-        logger.info("Brain Agent stopped")
-
-
 if __name__ == "__main__":
-    main()
+    agent = BrainAgent()
+    agent.run()
