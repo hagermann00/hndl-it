@@ -7,5 +7,7 @@ ollama
 mss
 Pillow
 SpeechRecognition
-pyaudio
+# pyaudio  # Requires portaudio system headers (sudo apt install portaudio19-dev)
 keyboard
+psutil
+pyautogui

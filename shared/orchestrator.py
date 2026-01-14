@@ -5,9 +5,9 @@ Uses tiered routing: Regex (0ms) -> Router LLM (fast) -> Brain LLM (complex)
 """
 
 import json
-import requests
 import re
 import logging
+from ollama import Client
 from typing import Dict, Any, Optional, List, Tuple
 from shared.llm_config import ACTIVE_ROLES
 
@@ -27,7 +27,7 @@ class Orchestrator:
     def __init__(self):
         self.router_model = ACTIVE_ROLES["router"]  # gemma2:2b
         self.brain_model = ACTIVE_ROLES["brain"]    # qwen2.5:3b
-        self.api_url = "http://localhost:11434/api/generate"
+        self.client = Client(host='http://localhost:11434', timeout=5)
         
         # Statistics for monitoring
         self.stats = {"regex_hits": 0, "router_hits": 0, "errors": 0}
@@ -127,32 +127,23 @@ Examples:
 """
 
         try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    "model": self.router_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,
-                        "num_ctx": 256,
-                        "num_predict": 100
-                    }
-                },
-                timeout=5
+            response = self.client.generate(
+                model=self.router_model,
+                prompt=prompt,
+                stream=False,
+                options={
+                    "temperature": 0.1,
+                    "num_ctx": 256,
+                    "num_predict": 100
+                }
             )
             
-            if response.status_code == 200:
-                result_text = response.json().get("response", "")
-                intent = self._extract_json(result_text)
-                intent["confidence"] = 0.8
-                intent["method"] = "router"
-                return intent
-            else:
-                logger.warning(f"Router returned {response.status_code}")
+            result_text = response.get("response", "")
+            intent = self._extract_json(result_text)
+            intent["confidence"] = 0.8
+            intent["method"] = "router"
+            return intent
                 
-        except requests.exceptions.Timeout:
-            logger.warning("Router timeout")
         except Exception as e:
             logger.error(f"Router error: {e}")
             self.stats["errors"] += 1
