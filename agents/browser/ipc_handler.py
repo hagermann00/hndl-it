@@ -64,8 +64,12 @@ class BrowserAgent(BaseAgent):
             url = payload.get("subject") or payload.get("url") or payload.get("input", "")
             if not url.startswith(("http://", "https://", "about:")):
                 url = "https://" + url
-            await self.controller.navigate(url)
-            self.logger.info(f"✅ Navigated to {url}")
+            # Add timeout to prevent hanging
+            try:
+                await asyncio.wait_for(self.controller.navigate(url), timeout=30)
+                self.logger.info(f"✅ Navigated to {url}")
+            except asyncio.TimeoutError:
+                self.logger.error(f"❌ Navigation to {url} timed out after 30s")
 
         elif action == "search":
             query = payload.get("subject") or payload.get("query") or payload.get("input", "")
@@ -74,8 +78,12 @@ class BrowserAgent(BaseAgent):
                 url = f"https://www.google.com/search?q=site:{site}+{query}"
             else:
                 url = f"https://www.google.com/search?q={query}"
-            await self.controller.navigate(url)
-            self.logger.info(f"✅ Searched: {query}")
+            # Add timeout to prevent hanging
+            try:
+                await asyncio.wait_for(self.controller.navigate(url), timeout=30)
+                self.logger.info(f"✅ Searched: {query}")
+            except asyncio.TimeoutError:
+                self.logger.error(f"❌ Search for {query} timed out after 30s")
             
         elif action == "type":
             # Basic implementation via script if CDP input not available
