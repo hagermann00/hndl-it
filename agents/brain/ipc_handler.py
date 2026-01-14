@@ -7,7 +7,7 @@ import sys
 import os
 import time
 import logging
-import requests
+from ollama import Client
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -25,7 +25,7 @@ class BrainAgent:
     
     def __init__(self):
         self.model = ACTIVE_ROLES.get("brain", "qwen2.5:3b")
-        self.api_url = "http://localhost:11434/api/generate"
+        self.client = Client(host='http://localhost:11434', timeout=15)
         logger.info(f"Brain Agent initialized with model: {self.model}")
     
     def answer(self, question: str) -> str:
@@ -37,29 +37,20 @@ Question: {question}
 Answer:"""
         
         try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_ctx": 512,
-                        "num_predict": 150
-                    }
-                },
-                timeout=15
+            response = self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                stream=False,
+                options={
+                    "temperature": 0.7,
+                    "num_ctx": 512,
+                    "num_predict": 150
+                }
             )
             
-            if response.status_code == 200:
-                answer = response.json().get("response", "").strip()
-                return answer if answer else "I couldn't generate an answer."
-            else:
-                return f"LLM error: {response.status_code}"
+            answer = response.get("response", "").strip()
+            return answer if answer else "I couldn't generate an answer."
                 
-        except requests.exceptions.Timeout:
-            return "Request timed out. Try a simpler question."
         except Exception as e:
             logger.error(f"Brain error: {e}")
             return f"Error: {e}"
