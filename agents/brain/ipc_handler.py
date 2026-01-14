@@ -35,6 +35,8 @@ class BrainAgent(BaseAgent):
             self._handle_answer(payload)
         elif action == "summarize":
             self._handle_summarize(payload)
+        elif action == "analyze_image":
+            self._handle_image_analysis(payload)
         else:
             self.logger.warning(f"Unknown action: {action}")
 
@@ -78,6 +80,47 @@ Summary:"""
             "question": "Summary",
             "answer": summary
         })
+
+    def _handle_image_analysis(self, payload: dict):
+        image_b64 = payload.get("image")
+        prompt = payload.get("prompt", "Describe this image.")
+
+        if not image_b64:
+            self.logger.warning("No image data provided for analysis")
+            return
+
+        self.logger.info(f"👁️ Analyzing image... Prompt: {prompt}")
+
+        # Use _generate but with image support
+        # We need to make sure _generate supports images or call client directly
+        try:
+            # Check if model supports vision?
+            # Ideally we might swap model to 'llava' or 'llama3.2-vision' if current is text-only
+            # For now assuming the user has a multimodal model loaded or the current one works
+
+            # Using client directly to pass images
+            response = self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                images=[image_b64],
+                stream=False
+            )
+            answer = response.get("response", "").strip()
+
+            self.logger.info(f"💡 Vision Result: {answer[:100]}...")
+
+            send_command("floater", "display", {
+                "type": "answer",
+                "question": "Vision Analysis",
+                "answer": answer
+            })
+
+        except Exception as e:
+            self.logger.error(f"Vision analysis failed: {e}")
+            send_command("floater", "display", {
+                "type": "error",
+                "message": f"Vision analysis failed: {e}"
+            })
 
     def _generate(self, prompt: str) -> str:
         try:

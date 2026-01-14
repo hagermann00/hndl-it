@@ -235,7 +235,7 @@ def init_todo_it(app, icon):
     return todo
 
 def init_capture_it(app, icon):
-    from floater.capture_tool import CapturePanel
+    from floater.capture_it.main import CapturePanel
     panel = CapturePanel(icon)
     add_context_menu(icon, "capture-it", app, lambda: panel.hide())
     
