@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication, QRubberBand)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication, QRubberBand, QFrame)
 from PyQt6.QtCore import Qt, QPoint, QRect, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QPainter, QPen, QScreen, QPixmap, QIcon
 
@@ -168,6 +168,9 @@ class CapturePanel(QWidget):
         self.snipper = SnippingWidget()
         self.snipper.captured.connect(self.on_captured)
         
+        # Action Overlay
+        self.action_overlay = None
+
         print("📸 CapturePanel initialized")
 
     def capture_full(self):
@@ -191,7 +194,57 @@ class CapturePanel(QWidget):
     def on_captured(self, pixmap):
         print("✅ Image captured via Snipper")
         self.save_capture(pixmap)
+        self.show_action_menu(pixmap)
+
+    def show_action_menu(self, pixmap):
+        """Show the post-capture action menu"""
+        from floater.capture_it.action_overlay import ActionOverlay
+
+        # Close existing if any
+        if self.action_overlay:
+            self.action_overlay.close()
+
+        self.action_overlay = ActionOverlay(pixmap)
+        self.action_overlay.action_selected.connect(self.handle_action)
+
+        # Position near mouse
+        cursor_pos = QPoint(QApplication.primaryScreen().cursor().pos())
+        self.action_overlay.move(cursor_pos.x() + 20, cursor_pos.y() + 20)
+        self.action_overlay.show()
         
+    def handle_action(self, action, payload):
+        """Handle action from overlay"""
+        print(f"⚡ Action selected: {action}")
+
+        if action == "save":
+            # Already saved in on_captured, just feedback
+            pass
+
+        elif action in ["explain", "resale"]:
+            # Send to Brain Agent via IPC
+            try:
+                from shared.ipc import send_command
+
+                prompt = "Explain this image in detail."
+                if action == "resale":
+                    prompt = "Analyze this item for resale. Identify the product, estimate value, and suggest search terms for comps."
+
+                send_command("brain", "analyze_image", {
+                    "image": payload["image"],
+                    "prompt": prompt
+                })
+                print(f"📨 Sent {action} request to Brain")
+
+                # Show feedback
+                # Ideally we show a 'thinking' toast or open the chat
+                send_command("floater", "display", {
+                    "type": "info",
+                    "content": f"🧠 Brain is analyzing image for {action}..."
+                })
+
+            except Exception as e:
+                print(f"❌ Failed to send IPC: {e}")
+
     def save_capture(self, pixmap):
         """Save capture to file and clipboard"""
         try:
@@ -201,10 +254,25 @@ class CapturePanel(QWidget):
             print("📋 Copied to clipboard")
             
             # 2. Save to Disk (Inbox)
-            folder = r"D:\Antigravity_Inbox"
-            if not os.path.exists(folder):
+            # Use centralized registry for correct Inbox location
+            try:
+                from shared.module_registry import MODULES
+                folder = MODULES["capture-it"]["inbox"]
+            except ImportError:
+                print("⚠️ shared.module_registry not found, falling back to desktop")
                 folder = os.path.join(os.path.expanduser("~"), "Desktop")
-                
+            except KeyError:
+                print("⚠️ capture-it not in registry, falling back to desktop")
+                folder = os.path.join(os.path.expanduser("~"), "Desktop")
+
+            # Ensure folder exists
+            if not os.path.exists(folder):
+                try:
+                    os.makedirs(folder)
+                except Exception as e:
+                    print(f"❌ Failed to create inbox folder {folder}: {e}")
+                    folder = os.path.join(os.path.expanduser("~"), "Desktop")
+
             import datetime
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"capture_{ts}.png"
@@ -217,4 +285,3 @@ class CapturePanel(QWidget):
             
         except Exception as e:
             print(f"❌ Save failed: {e}")
-
