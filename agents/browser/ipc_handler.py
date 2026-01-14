@@ -1,108 +1,106 @@
 """
-Browser Agent IPC Handler
-Listens for IPC commands and executes browser actions.
+Browser Agent - Controls Chrome via CDP.
+Inherits from BaseAgent for robust IPC, uses asyncio for BrowserController.
 """
 
 import sys
 import os
-import time
-import logging
+import asyncio
+import threading
+from concurrent.futures import Future
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-from shared.ipc import check_mailbox
+from shared.agent_base import BaseAgent
 from agents.browser.browser_controller import BrowserController
-from shared.eval_logger import log_eval
 from shared.voice_output import speak
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("hndl-it.browser.handler")
+class BrowserAgent(BaseAgent):
+    def __init__(self):
+        # Initialize BaseAgent with 1 worker to ensure serial execution of browser commands
+        # (Browsers are stateful and serial by nature for a single view)
+        super().__init__("browser", max_workers=1)
 
+        self.controller = BrowserController()
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self._run_event_loop, daemon=True)
+        self.loop_thread.start()
 
-def main():
-    """Run browser agent IPC handler."""
-    logger.info("🌐 Browser Agent Handler starting...")
-    
-    controller = None
-    
-    try:
-        while True:
-            # Check for commands
-            action, payload = check_mailbox("browser")
+        # Initialize the controller on the loop
+        future = asyncio.run_coroutine_threadsafe(self.controller.start(), self.loop)
+        try:
+            future.result(timeout=10)
+            self.logger.info("🌐 Browser Controller connected.")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to connect to browser: {e}")
+
+    def _run_event_loop(self):
+        """Runs the asyncio loop in a dedicated thread."""
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
+    def process_action(self, action: str, payload: dict):
+        """
+        Receives synchronous calls from BaseAgent's thread pool.
+        Proxies them to the async loop.
+        """
+        # Create a future to wait for the async result
+        coro = self._route_action(action, payload)
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+
+        try:
+            # Wait for result (blocks this worker thread, but not the IPC loop)
+            future.result(timeout=30)
+        except Exception as e:
+            self.logger.error(f"Action {action} timed out or failed: {e}")
+            raise e
+
+    async def _route_action(self, action: str, payload: dict):
+        """Async router running on the loop."""
+        if action == "navigate":
+            url = payload.get("subject") or payload.get("url") or payload.get("input", "")
+            if not url.startswith(("http://", "https://", "about:")):
+                url = "https://" + url
+            await self.controller.navigate(url)
+            self.logger.info(f"✅ Navigated to {url}")
+
+        elif action == "search":
+            query = payload.get("subject") or payload.get("query") or payload.get("input", "")
+            site = payload.get("modifier") or payload.get("site", "")
+            if site:
+                url = f"https://www.google.com/search?q=site:{site}+{query}"
+            else:
+                url = f"https://www.google.com/search?q={query}"
+            await self.controller.navigate(url)
+            self.logger.info(f"✅ Searched: {query}")
             
-            if action:
-                logger.info(f"📥 Received: {action} - {payload}")
-                
-                try:
-                    # Lazy init controller
-                    if controller is None:
-                        controller = BrowserController()
-                        controller.navigate("about:blank")
-                    
-                    # Handle actions
-                    if action == "navigate":
-                        url = payload.get("subject") or payload.get("url") or payload.get("input", "")
-                        # Clean URL
-                        if not url.startswith(("http://", "https://")):
-                            url = "https://" + url
-                        controller.navigate(url)
-                        logger.info(f"✅ Navigated to {url}")
-                        
-                    elif action == "search":
-                        query = payload.get("subject") or payload.get("query") or payload.get("input", "")
-                        site = payload.get("modifier") or payload.get("site", "")
-                        
-                        if site:
-                            url = f"https://www.google.com/search?q=site:{site}+{query}"
-                        else:
-                            url = f"https://www.google.com/search?q={query}"
-                        controller.navigate(url)
-                        logger.info(f"✅ Searched: {query}")
-                        
-                    elif action == "search_site":
-                        query = payload.get("subject", "")
-                        site = payload.get("modifier", "")
-                        url = f"https://www.google.com/search?q=site:{site}+{query}"
-                        controller.navigate(url)
-                    
-                    elif action == "query":
-                        # Generic query - search Google
-                        query = payload.get("key") or payload.get("query") or payload.get("subject") or payload.get("input", "")
-                        url = f"https://www.google.com/search?q={query}"
-                        controller.navigate(url)
-                        logger.info(f"✅ Queried: {query}")
-                        
-                    elif action == "close":
-                        if controller:
-                            controller.quit()
-                            controller = None
-                        logger.info("✅ Browser closed")
-                        
-                    elif action == "quit":
-                        logger.info("Shutting down...")
-                        break
-                        
-                    else:
-                        logger.warning(f"Unknown action: {action}")
-                    
-                    # Log success for evaluation
-                    log_eval("browser", action, f"Completed: {payload}", meta=payload)
-                        
-                except Exception as e:
-                    logger.error(f"Error executing {action}: {e}")
-                    log_eval("browser", action, "FAILED", error=str(e), meta=payload)
-                    speak(f"Browser error: {e}")
+        elif action == "type":
+            # Basic implementation via script if CDP input not available
+            text = payload.get("text", "")
+            # TODO: Implement proper typing
+            pass
             
-            time.sleep(0.5)  # Poll interval
+        elif action == "click":
+             # TODO: Implement clicking
+             pass
+
+        elif action == "close":
+            await self.controller.close()
             
-    except KeyboardInterrupt:
-        logger.info("Interrupted")
-    finally:
-        if controller:
-            controller.quit()
-        logger.info("Browser Handler stopped")
+        else:
+            self.logger.warning(f"Unknown action: {action}")
+
+    def stop(self):
+        """Override stop to close loop."""
+        super().stop()
+        if self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        self.loop_thread.join(timeout=1)
 
 
 if __name__ == "__main__":
-    main()
+    agent = BrowserAgent()
+    agent.run()

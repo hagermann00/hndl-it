@@ -9,6 +9,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("supervisor")
 
 LOCK_FILE = "supervisor.lock"
+SUITE_SCRIPT = "launch_suite.py"
 
 def check_singleton():
     """Ensure only one supervisor runs."""
@@ -29,52 +30,71 @@ def check_singleton():
     with open(LOCK_FILE, 'w') as f:
         f.write(str(os.getpid()))
 
+def get_python_executable(base_dir):
+    """Determine the best Python executable to use."""
+    # Check for venv in standard locations
+    venvs = [
+        os.path.join(base_dir, ".venv", "Scripts", "python.exe"), # Windows
+        os.path.join(base_dir, ".venv", "bin", "python"),         # Unix
+        os.path.join(base_dir, "venv", "Scripts", "python.exe"),
+        os.path.join(base_dir, "venv", "bin", "python")
+    ]
+
+    for path in venvs:
+        if os.path.exists(path):
+            return path
+
+    return sys.executable
+
 def main():
     check_singleton()
     
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    python_exe = get_python_executable(base_dir)
     
-    # We now use the Unified Suite Launcher
-    # This prevents "3 instances of every icon"
-    # Determine which Python to use (prefer the .venv)
-    venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
-    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
-    
+    suite_script_path = os.path.join(base_dir, SUITE_SCRIPT)
+    if not os.path.exists(suite_script_path):
+        logger.error(f"❌ Could not find {SUITE_SCRIPT}")
+        sys.exit(1)
+
     logger.info(f"🚀 Launching Unified Suite using {python_exe}...")
     
     # Launch the Suite
-    suite_process = subprocess.Popen([python_exe, suite_script], cwd=base_dir)
-
-    
-    print("✅ Hndl-it Suite Launched.")
-    print(f"   PID: {suite_process.pid}")
-    print("   Close this window to stop the suite.")
-    
     try:
+        suite_process = subprocess.Popen([python_exe, suite_script_path], cwd=base_dir)
+
+        print("✅ Hndl-it Suite Launched.")
+        print(f"   PID: {suite_process.pid}")
+        print("   Close this window to stop the suite.")
+
         while True:
             time.sleep(1)
             # Check if suite is still running
             if suite_process.poll() is not None:
                 logger.warning("Suite exited. Supervisor shutting down.")
                 break
+
     except KeyboardInterrupt:
         print("\nStopping Suite...")
-        try:
-            parent = psutil.Process(suite_process.pid)
-            for child in parent.children(recursive=True):
-                try:
-                    child.terminate()
-                except:
-                    pass
-            parent.terminate()
-        except Exception as e:
-            logger.error(f"Error killing process tree: {e}")
-            # Fallback
-            suite_process.terminate()
+    except Exception as e:
+        logger.error(f"Error running suite: {e}")
+    finally:
+        # Cleanup
+        if 'suite_process' in locals() and suite_process.poll() is None:
+             try:
+                parent = psutil.Process(suite_process.pid)
+                for child in parent.children(recursive=True):
+                    try:
+                        child.terminate()
+                    except:
+                        pass
+                parent.terminate()
+             except Exception as e:
+                logger.error(f"Error killing process tree: {e}")
+                suite_process.terminate()
         
-    # Cleanup lock
-    if os.path.exists(LOCK_FILE):
-        os.remove(LOCK_FILE)
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
 
 if __name__ == "__main__":
     main()

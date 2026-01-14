@@ -2,9 +2,17 @@
 LLM Configuration for hndl-it
 Defines the specific models used for different roles in the system.
 
-VRAM Budget: ~10GB on 12GB RTX 2060
 Strategy: Two-Gear Model (Resident Router + On-Demand Brain)
 """
+
+import os
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+# Allow overriding the host via environment variable
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # ============================================================================
 # MODEL CATALOG
@@ -12,6 +20,7 @@ Strategy: Two-Gear Model (Resident Router + On-Demand Brain)
 MODELS = {
     # Vision
     "moondream": {"size_gb": 1.7, "type": "vision", "notes": "Image understanding"},
+    "llava": {"size_gb": 4.0, "type": "vision", "notes": "Better vision, heavier"},
     
     # Fast Routers (1.5-2.5 GB)
     "gemma2:2b": {"size_gb": 1.6, "type": "router", "notes": "Default router, fast"},
@@ -22,6 +31,7 @@ MODELS = {
     "gemma:7b": {"size_gb": 5.0, "type": "brain", "notes": "Original brain"},
     "qwen2.5:7b": {"size_gb": 4.7, "type": "brain", "notes": "Strong reasoning"},
     "llama3.1:8b": {"size_gb": 4.9, "type": "brain", "notes": "DeepThink pick"},
+    "mistral": {"size_gb": 4.1, "type": "brain", "notes": "Balanced"},
 }
 
 # ============================================================================
@@ -30,21 +40,24 @@ MODELS = {
 # This is the "Two-Gear" strategy:
 # - Router is always resident in VRAM (fast intent classification)
 # - Brain is loaded on-demand for complex tasks (then unloaded)
-# - Vision is loaded on-demand for image tasks
 
 ACTIVE_ROLES = {
-    "router": "gemma2:2b",     # Always resident (~1.6 GB)
-    "brain": "qwen2.5:3b",     # On-demand (~2.0 GB) - Using smaller model for VRAM safety
-    "vision": "moondream",     # On-demand (~1.7 GB)
+    "router": os.getenv("MODEL_ROUTER", "gemma2:2b"),
+    "brain": os.getenv("MODEL_BRAIN", "qwen2.5:3b"),
+    "vision": os.getenv("MODEL_VISION", "moondream"),
 }
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
+def get_ollama_host() -> str:
+    """Get the configured Ollama host."""
+    return OLLAMA_HOST
+
 def get_model_for_role(role: str) -> str:
     """Get the model name for a specific role."""
-    return ACTIVE_ROLES.get(role, "gemma:7b")  # Default to gemma:7b
+    return ACTIVE_ROLES.get(role, "qwen2.5:3b")
 
 def get_model_info(model_name: str) -> dict:
     """Get model metadata."""
@@ -58,19 +71,13 @@ def estimate_vram_usage() -> float:
         total += info.get("size_gb", 0)
     return total
 
-def get_available_models_by_type(model_type: str) -> list:
-    """Get all models of a specific type."""
-    return [name for name, info in MODELS.items() if info.get("type") == model_type]
-
-# ============================================================================
-# CONFIGURATION VALIDATION
-# ============================================================================
-
 def validate_config():
     """Validate current configuration fits in VRAM budget."""
     VRAM_BUDGET = 10.0  # Leave 2GB headroom on 12GB card
     estimated = estimate_vram_usage()
     
+    print(f"🔧 Ollama Host: {OLLAMA_HOST}")
+
     if estimated > VRAM_BUDGET:
         print(f"⚠️ WARNING: Estimated VRAM ({estimated:.1f}GB) exceeds budget ({VRAM_BUDGET}GB)")
         return False
