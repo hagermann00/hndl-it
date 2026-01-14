@@ -1,0 +1,37 @@
+sources:
+  hndl-it-db:
+    kind: "sqlite"
+    database: "C:/IIWII_DB/hndl-it/mcp-servers/database/main.db"
+
+tools:
+  run_query:
+    kind: sqlite-sql
+    source: hndl-it-db
+    description: Execute any SQL query against the database
+    statement: "{{.sql}}"
+    templateParameters:
+      - name: sql
+        type: string
+        description: The SQL statement to execute
+
+  list_tables:
+    kind: sqlite-sql
+    source: hndl-it-db
+    description: List all tables in the database
+    statement: "SELECT name FROM sqlite_master WHERE type='table';"
+
+  read_notes:
+    kind: sqlite-sql
+    source: hndl-it-db
+    description: Read all notes from the notes table
+    statement: "SELECT * FROM notes;"
+
+  insert_note:
+    kind: sqlite-sql
+    source: hndl-it-db
+    description: Insert a new note into the database
+    statement: "INSERT INTO notes (content) VALUES (?);"
+    parameters:
+      - name: content
+        type: string
+        description: The content of the note to insert

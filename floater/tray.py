@@ -8,6 +8,7 @@ from floater.quick_dialog import QuickDialog
 from floater.client import MultiAgentClient # Changed
 
 from floater.settings import SettingsDialog
+from floater.content_forge import ContentForge
 
 logger = logging.getLogger("hndl-it.floater.tray")
 
@@ -18,6 +19,10 @@ class FloaterTray(QSystemTrayIcon):
         
         # Settings UI
         self.settings_dialog = SettingsDialog()
+        
+        # Content Forge UI
+        self.content_forge = ContentForge()
+        self.content_forge.command_submitted.connect(self.on_command)
         
         # Load Icon
         icon_path = ""
@@ -64,6 +69,10 @@ class FloaterTray(QSystemTrayIcon):
         self.action_settings = QAction("Settings...", self)
         self.action_settings.triggered.connect(self.settings_dialog.show)
         self.menu.addAction(self.action_settings)
+        
+        self.action_forge = QAction("Content Forge...", self)
+        self.action_forge.triggered.connect(self.content_forge.show)
+        self.menu.addAction(self.action_forge)
         
         self.menu.addSeparator()
         
@@ -241,7 +250,14 @@ class FloaterTray(QSystemTrayIcon):
             action, payload = check_mailbox("floater")
             
             if action and payload:
-                if action == "display":
+                if action == "render_a2ui":
+                    a2ui = payload.get("a2ui", {})
+                    if a2ui:
+                        self.quick_dialog.render_a2ui(a2ui)
+                    else:
+                        self.quick_dialog.add_log("⚠️ Received empty A2UI payload")
+                
+                elif action == "display":
                     msg_type = payload.get("type", "info")
                     
                     if msg_type == "answer":
@@ -249,6 +265,8 @@ class FloaterTray(QSystemTrayIcon):
                         answer = payload.get("answer", "")
                         self.quick_dialog.add_log(f"❓ {question}")
                         self.quick_dialog.add_log(f"💡 {answer}")
+                        from shared.voice_output import speak
+                        speak(answer)
                         
                     elif msg_type == "error":
                         message = payload.get("message", "Unknown error")

@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from shared.ipc import check_mailbox
 from agents.browser.browser_controller import BrowserController
+from shared.eval_logger import log_eval
+from shared.voice_output import speak
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("hndl-it.browser.handler")
@@ -83,9 +85,14 @@ def main():
                         
                     else:
                         logger.warning(f"Unknown action: {action}")
+                    
+                    # Log success for evaluation
+                    log_eval("browser", action, f"Completed: {payload}", meta=payload)
                         
                 except Exception as e:
                     logger.error(f"Error executing {action}: {e}")
+                    log_eval("browser", action, "FAILED", error=str(e), meta=payload)
+                    speak(f"Browser error: {e}")
             
             time.sleep(0.5)  # Poll interval
             

@@ -49,6 +49,12 @@ ROUTING_RULES = [
         r"\blaunch\b", r"\brun\b.*\bapp\b",
         r"\bexplorer\b", r"\bdesktop\b"
     ]),
+    
+    # admin/system triggers
+    (VoiceTarget.HNDL_IT, [
+        r"\blog\b.*\berror\b", r"\bevaluate\b", r"\beval\b",
+        r"\bclean\b.*\bdrive\b", r"\bcleanup\b", r"\bstorage\b"
+    ]),
 ]
 
 
