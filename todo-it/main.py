@@ -11,6 +11,8 @@ import sys
 import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
+    QTreeWidget, QTreeWidgetItem, QFrame, QLabel, QMenu,
+    QTextEdit, QSplitter, QApplication, QDialog, QDialogButtonBox, QFormLayout
     QTreeView, QFrame, QLabel, QMenu, QTextEdit, QTextBrowser, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QModelIndex
@@ -97,6 +99,58 @@ class QuickInputBox(QFrame):
         if text:
             self.submitted.emit(text)
             self.input.clear()
+
+
+class AddLinkDialog(QDialog):
+    """Dialog to add a URL link with a title."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Link")
+        self.setModal(True)
+
+        layout = QFormLayout(self)
+        self.url_input = QLineEdit()
+        self.title_input = QLineEdit()
+        layout.addRow("URL:", self.url_input)
+        layout.addRow("Title:", self.title_input)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.apply_styles()
+
+    def apply_styles(self):
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {COLORS['bg_dark']};
+                color: {COLORS['text']};
+            }}
+            QLineEdit {{
+                background-color: {COLORS['bg_panel']};
+                color: {COLORS['text']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 4px;
+                padding: 5px;
+            }}
+            QPushButton {{
+                background-color: {COLORS['primary']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px 15px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['secondary']};
+            }}
+        """)
+
+    def get_data(self):
+        return {
+            'url': self.url_input.text().strip(),
+            'title': self.title_input.text().strip()
+        }
 
 
 class TodoPanel(QFrame):
@@ -261,6 +315,78 @@ class TodoPanel(QFrame):
             self.model.add_item("New sub-task", index)
             self.tree.expand(index)
         elif action == delete_action:
+            self.delete_todo(widget, todo)
+        
+        self.save_data()
+    
+    def add_subtask(self, parent_widget, parent_todo):
+        """Add a sub-task."""
+        # Quick inline add would be better, but for now just add a placeholder
+        sub = TodoItem("New sub-task", parent_todo.id)
+        parent_todo.children.append(sub)
+        self.add_tree_item(sub, parent_widget)
+        parent_widget.setExpanded(True)
+        self.save_data()
+    
+    def add_link_dialog(self, todo):
+        """Show dialog to add a link."""
+        dialog = AddLinkDialog(self)
+        if dialog.exec():
+            data = dialog.get_data()
+            if data['url']:
+                # If no title is given, use the URL as the title
+                if not data['title']:
+                    data['title'] = data['url']
+                todo.links.append(data)
+                self.save_data()
+    
+    def show_notes(self, todo):
+        """Show/hide notes panel for this item."""
+        self.current_todo = todo
+        self.details.setText(todo.notes)
+        self.details.show()
+    
+    def save_current_notes(self):
+        """Save notes from the details panel."""
+        if hasattr(self, 'current_todo') and self.current_todo:
+            self.current_todo.notes = self.details.toPlainText()
+            self.save_data()
+    
+    def delete_todo(self, widget, todo):
+        """Delete a todo item."""
+        # Remove from data
+        self.todos = [t for t in self.todos if t.id != todo.id]
+        # Also check children
+        for t in self.todos:
+            t.children = [c for c in t.children if c.id != todo.id]
+        
+        # Remove from tree
+        parent = widget.parent()
+        if parent:
+            parent.removeChild(widget)
+        else:
+            self.tree.takeTopLevelItem(self.tree.indexOfTopLevelItem(widget))
+        
+        self.save_data()
+    
+    def save_data(self):
+        """Save todos to JSON file."""
+        data = [t.to_dict() for t in self.todos]
+        with open(DATA_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def load_data(self):
+        """Load todos from JSON file."""
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r') as f:
+                    data = json.load(f)
+                self.todos = [TodoItem.from_dict(d) for d in data]
+                for todo in self.todos:
+                    self.add_tree_item(todo)
+            except Exception as e:
+                print(f"Error loading todos: {e}")
+    
             self.model.delete_item(index)
             
     def show_animated(self):
