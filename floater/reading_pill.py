@@ -281,10 +281,6 @@ class ReadingPill(QWidget):
         self.clipboard = QApplication.clipboard()
         self.clipboard.changed.connect(self.on_clipboard_change)
         
-        # Also poll periodically for selection changes
-        self.poll_timer = QTimer()
-        self.poll_timer.timeout.connect(self.check_selection)
-        self.poll_timer.start(500)  # Check every 500ms
         
     def on_clipboard_change(self, mode):
         """Handle clipboard changes"""
@@ -299,12 +295,6 @@ class ReadingPill(QWidget):
             self.last_clipboard = text
             self.current_text = text
             self.show_pill()
-            
-    def check_selection(self):
-        """Check for text selection (platform specific)"""
-        # On Windows, we mainly rely on clipboard
-        # User copies text with Ctrl+C, pill appears
-        pass
         
     def show_pill(self):
         """Show the pill with animation"""

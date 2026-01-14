@@ -4,6 +4,12 @@
 
 ---
 
+## ⏭️ NEXT UP: Airweave Walkthrough
+
+- [ ] **Walk through Airweave integration** - Connect research archive (Google Drive) to MCP for vector context retrieval.
+
+---
+
 ## 🚀 NEXT MODULE: todo-it
 
 **The next icon** - A TODO input/interface that needs future-proofing:

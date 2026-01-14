@@ -71,61 +71,60 @@ class QuickDialog(QDialog):
         self.collapse_to_input()
 
     def _setup_styles(self):
+        # Warm orange/amber theme - NO blue/purple
         self.setStyleSheet("""
             QDialog {
-                background-color: rgba(20, 30, 25, 240);
-                border: 4px solid rgba(50, 255, 50, 255);
-                border-radius: 14px;
-                outline: 3px solid rgba(0, 0, 0, 200);
+                background-color: rgba(25, 22, 20, 230);
+                border: 3px solid rgba(255, 140, 50, 200);
+                border-radius: 12px;
             }
             QDialog[collapsed="true"] {
-                background-color: rgba(30, 45, 35, 220);
+                background-color: rgba(30, 25, 22, 200);
             }
             QLabel#Title {
                 color: #ffffff;
                 font-weight: bold;
                 font-family: 'Segoe UI', sans-serif;
-                text-shadow: 0 0 5px rgba(100, 255, 100, 150);
             }
             QLabel#StatusLabel {
-                color: #aaffaa;
+                color: rgba(255, 180, 100, 220);
                 font-size: 12px;
                 font-family: 'Segoe UI', sans-serif;
             }
             QLabel#ProgressLabel {
-                color: #66ff66;
+                color: #ff9944;
                 font-weight: bold;
                 font-size: 14px;
                 font-family: 'Segoe UI', sans-serif;
             }
             QLabel#ActivityDot {
-                color: #44ff44;
+                color: #ffaa44;
                 font-size: 16px;
             }
             QLineEdit {
                 padding: 10px;
-                background-color: rgba(20, 30, 25, 200);
-                border: 2px solid rgba(100, 255, 100, 150);
+                background-color: rgba(35, 30, 25, 220);
+                border: 2px solid rgba(255, 140, 50, 150);
                 color: #ffffff;
                 border-radius: 6px;
                 font-size: 14px;
                 font-family: 'Segoe UI', sans-serif;
             }
             QLineEdit:focus {
-                border: 2px solid #66ff66;
-                background-color: rgba(30, 45, 35, 220);
+                border: 2px solid #ff9944;
+                background-color: rgba(45, 38, 30, 240);
             }
             QTextEdit {
-                background-color: rgba(20, 28, 22, 180);
-                border: 1px solid rgba(80, 200, 100, 100);
+                background-color: rgba(30, 26, 22, 200);
+                border: 1px solid rgba(255, 140, 50, 80);
                 border-radius: 4px;
-                color: #ccffcc;
+                color: rgba(255, 220, 180, 230);
                 font-family: 'Consolas', monospace;
                 font-size: 13px;
             }
             QPushButton#CloseBtn {
                 background-color: transparent;
-                color: #aaffaa;
+                color: rgba(255, 180, 120, 200);
                 border: none;
                 font-weight: bold;
                 font-size: 16px;
@@ -134,35 +133,35 @@ class QuickDialog(QDialog):
                 color: #ff6666;
             }
             QPushButton#PauseBtn {
-                background-color: rgba(35, 55, 40, 200);
-                color: #88ff88;
-                border: 1px solid rgba(100, 255, 100, 150);
+                background-color: rgba(50, 40, 30, 200);
+                color: #ffaa66;
+                border: 1px solid rgba(255, 140, 50, 150);
                 border-radius: 4px;
                 padding: 3px 8px;
                 font-size: 11px;
             }
             QPushButton#PauseBtn:hover {
-                background-color: rgba(45, 70, 50, 220);
+                background-color: rgba(70, 55, 40, 220);
             }
             QProgressBar {
                 border: none;
-                background-color: rgba(25, 35, 30, 150);
+                background-color: rgba(40, 35, 30, 150);
                 height: 4px;
                 border-radius: 2px;
             }
             QProgressBar::chunk {
-                background-color: #66ff66;
+                background-color: #ff9944;
                 border-radius: 2px;
             }
             QPushButton#ModeBtn, QPushButton#ClickThroughBtn, QPushButton#SettingsBtn {
-                background-color: rgba(35, 55, 40, 200);
-                color: #aaffaa;
-                border: 1px solid rgba(100, 255, 100, 150);
+                background-color: rgba(50, 40, 30, 200);
+                color: rgba(255, 180, 120, 200);
+                border: 1px solid rgba(255, 140, 50, 150);
                 border-radius: 4px;
                 font-size: 11px;
             }
             QPushButton#ModeBtn:hover, QPushButton#ClickThroughBtn:hover, QPushButton#SettingsBtn:hover {
-                background-color: rgba(50, 80, 55, 220);
+                background-color: rgba(70, 55, 40, 220);
                 color: #ffffff;
             }
         """)
@@ -276,8 +275,15 @@ class QuickDialog(QDialog):
         # Log/Output area
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
-        self.log_area.setFixedHeight(180)
+        self.log_area.setFixedHeight(120)  # Reduced to make room for A2UI
         content_layout.addWidget(self.log_area)
+        
+        # A2UI Render Zone - for rich agent UI output
+        from .a2ui_renderer import A2UIRenderer
+        self.a2ui_zone = A2UIRenderer()
+        self.a2ui_zone.setFixedHeight(150)
+        self.a2ui_zone.action_triggered.connect(self._handle_a2ui_action)
+        content_layout.addWidget(self.a2ui_zone)
         
         self.main_layout.addWidget(self.content_widget)
         self.setLayout(self.main_layout)
@@ -603,3 +609,34 @@ class QuickDialog(QDialog):
         self.current_settings = settings
         self.add_log("Settings saved!")
 
+    def _handle_a2ui_action(self, action: str, payload: dict):
+        """Handle actions triggered from A2UI buttons."""
+        logger.info(f"A2UI action: {action} with payload: {payload}")
+        self.add_log(f"[A2UI] {action}: {payload}")
+        
+        # Route common actions
+        if action == "expand_result":
+            entity_id = payload.get("entity_id", "")
+            self.add_log(f"Expanding result: {entity_id}")
+            # TODO: Fetch full content from Airweave and display
+        elif action == "search_again":
+            query = payload.get("query", "")
+            if query:
+                self.input.setText(query)
+                self.submit()
+        else:
+            # Emit as command for orchestrator to handle
+            self.command_submitted.emit(f"a2ui:{action}:{payload}")
+
+    def render_a2ui(self, a2ui_payload: dict):
+        """Render an A2UI component tree in the A2UI zone."""
+        if hasattr(self, 'a2ui_zone'):
+            self.a2ui_zone.render(a2ui_payload)
+            self.add_log("[A2UI] Rendered component")
+        else:
+            logger.warning("A2UI zone not initialized")
+
+    def clear_a2ui(self):
+        """Clear the A2UI render zone."""
+        if hasattr(self, 'a2ui_zone'):
+            self.a2ui_zone.clear()
