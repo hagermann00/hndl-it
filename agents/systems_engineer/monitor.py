@@ -7,7 +7,7 @@ Responsibilities:
 2. Resource usage monitoring (CPU, RAM, VRAM)
 3. Log analysis for error patterns ("Archive Worm" logic)
 4. Auto-optimization suggestions
-5. ZOMBIE HUNTER: Detects and kills runaway processes
+5. ZOMBIE HUNTER: Detects runaway processes and summons MEDIC
 
 Usage:
     Run as a background process: python agents/systems_engineer/monitor.py
@@ -32,11 +32,11 @@ from shared.ipc import send_command, broadcast
 # Configuration
 CHECK_INTERVAL_SECONDS = 60  # Check every 1 minute now for faster response
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
-INTERVENTION_LOG = os.path.join(LOG_DIR, "interventions.log")
 
 # Zombie Hunter Config
+ENABLE_ZOMBIE_HUNTER = False  # Disabled by default, can be enabled by user/config
 MAX_CPU_PERCENT = 90.0
-MAX_DURATION_HIGH_CPU = 300  # 5 minutes (300s) of continuous high CPU
+MAX_DURATION_HIGH_CPU = 300  # 5 minutes
 PROTECTED_PROCESSES = ["supervisor.py", "monitor.py", "launch_suite.py"]
 
 # Setup logging
@@ -169,11 +169,9 @@ class SystemsEngineer:
                             "status": proc.status()
                         })
 
-                # 2. Zombie Hunting (Python processes only)
-                if "python" in name.lower():
+                # 2. Zombie Hunting (if enabled)
+                if ENABLE_ZOMBIE_HUNTER and "python" in name.lower():
                     # Call cpu_percent.
-                    # First call on new object = 0.0.
-                    # Second call (next loop) = meaningful.
                     cpu = proc.cpu_percent(interval=None)
 
                     if cpu > MAX_CPU_PERCENT:
@@ -186,7 +184,7 @@ class SystemsEngineer:
                             duration = time.time() - self.high_cpu_tracker[pid]
                             logger.info(f"tracking zombie {pid}: {duration:.1f}s > {MAX_DURATION_HIGH_CPU}s @ {cpu}%")
                             if duration > MAX_DURATION_HIGH_CPU:
-                                self._kill_zombie(proc, cmd_str, duration, cpu)
+                                self._summon_medic(pid, cmd_str, duration, cpu)
                     else:
                         # Cooled down, remove from tracker
                         if pid in self.high_cpu_tracker:
@@ -209,41 +207,33 @@ class SystemsEngineer:
                 
         return found
 
-    def _kill_zombie(self, proc, cmd_name, duration, cpu):
-        """Terminate a runaway process."""
+    def _summon_medic(self, pid, cmd_name, duration, cpu):
+        """Summon the Medic agent to deal with the zombie."""
         # Safety Check: Don't kill protected processes
         for safe in PROTECTED_PROCESSES:
             if safe in cmd_name:
-                logger.warning(f"⚠️ Cannot kill protected process {safe} (PID {proc.pid}) despite high load.")
+                logger.warning(f"⚠️ Cannot kill protected process {safe} (PID {pid}) despite high load.")
                 return
 
-        logger.info(f"🧟 KILLING ZOMBIE: PID {proc.pid} ({cmd_name}) - {duration:.0f}s @ {cpu}% CPU")
+        logger.info(f"🚑 SUMMONING MEDIC for PID {pid} ({cmd_name}) - {duration:.0f}s @ {cpu}% CPU")
 
         try:
-            proc.terminate()
-            time.sleep(1)
-            if proc.is_running():
-                proc.kill()
+            medic_script = os.path.join(PROJECT_ROOT, "agents", "medic", "medic_agent.py")
+            if not os.path.exists(medic_script):
+                logger.error("Medic agent script not found!")
+                return
 
-            self._log_intervention(proc.pid, cmd_name, f"High CPU ({cpu}%) for {duration:.0f}s")
+            # Launch Medic as a subprocess
+            subprocess.Popen([sys.executable, medic_script, str(pid), cmd_name, str(cpu), str(duration)])
 
             # Notify user
             send_command("floater", "display", {
-                "type": "success",
-                "message": f"🛡️ Auto-Fixed: Killed stuck process (PID {proc.pid})"
+                "type": "warning",
+                "message": f"🚑 Medic dispatched for stuck process (PID {pid})"
             })
 
         except Exception as e:
-            logger.error(f"Failed to kill zombie {proc.pid}: {e}")
-
-    def _log_intervention(self, pid, name, reason):
-        """Log the intervention for the user to see 'what works'."""
-        entry = f"{datetime.now().isoformat()} | KILL | PID: {pid} | Name: {name} | Reason: {reason}\n"
-        try:
-            with open(INTERVENTION_LOG, 'a', encoding='utf-8') as f:
-                f.write(entry)
-        except Exception as e:
-            logger.error(f"Failed to write intervention log: {e}")
+            logger.error(f"Failed to summon medic: {e}")
 
     def _scan_logs(self) -> List[str]:
         """Scan recent log files for ERROR patterns."""
