@@ -96,4 +96,4 @@ Transform the interaction model from "Tray-only" to a "Floating Overlay Widget" 
 </artifacts>
 
 </workspace_context>
-<mission_brief>[Describe your task here...]</mission_brief>
+<mission_brief>[I need a cpom[lp;ete trighten or bnreaking uip or restructuireion or somethign tha trewiall make this not fucntionlike shit]]</mission_brief>
