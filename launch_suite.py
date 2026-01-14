@@ -483,7 +483,7 @@ def launch_all():
         ("read", os.path.join(PROJECT_ROOT, "read-it", "ipc_handler.py")),
         ("browser", os.path.join(PROJECT_ROOT, "agents", "browser", "ipc_handler.py")),
         ("brain", os.path.join(PROJECT_ROOT, "agents", "brain", "ipc_handler.py")),
-        # ("desktop", os.path.join(PROJECT_ROOT, "agents", "desktop", "ipc_handler.py")),  # Needs pyautogui
+        ("desktop", os.path.join(PROJECT_ROOT, "agents", "desktop", "ipc_handler.py")),
     ]
     
     for name, script in agent_scripts:
