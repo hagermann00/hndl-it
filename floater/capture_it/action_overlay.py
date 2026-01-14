@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QApplication)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QBuffer, QByteArray, QIODevice
 from PyQt6.QtGui import QPixmap, QIcon, QCursor
 import base64
 import io
@@ -81,10 +81,12 @@ class ActionOverlay(QWidget):
 
         payload = {}
         if action in ["explain", "resale"]:
-            # Convert pixmap to base64
-            ba = io.BytesIO()
-            self.pixmap.save(ba, "PNG")
-            b64_str = base64.b64encode(ba.getvalue()).decode("utf-8")
+            # Convert pixmap to base64 using QBuffer
+            ba = QByteArray()
+            buff = QBuffer(ba)
+            buff.open(QIODevice.OpenModeFlag.WriteOnly)
+            self.pixmap.save(buff, "PNG")
+            b64_str = base64.b64encode(ba.data()).decode("utf-8")
             payload["image"] = b64_str
 
         self.action_selected.emit(action, payload)

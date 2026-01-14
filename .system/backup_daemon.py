@@ -37,6 +37,10 @@ SOURCE = Path(r"C:\IIWII_DB\hndl-it")
 CLONE_D = Path(r"D:\IIWII_DB\hndl-it")
 INTERMEDIATE_D = Path(r"D:\IIWII_DB\intermediate")
 
+# Inbox Paths
+INBOX_SOURCE = Path(r"D:\Antigravity_Inbox")
+INBOX_ARCHIVE = Path(r"H:\My Drive\Antigravity_Inbox_Backup")
+
 GDRIVE_BASE = Path(r"H:\My Drive\IIWII_ARCHIVE")
 ARCHIVE_CODE = GDRIVE_BASE / "hndl-it"
 LOGS_LIVE = GDRIVE_BASE / "logs" / "live"
@@ -55,7 +59,7 @@ last_version_time = 0
 
 def setup_folders():
     """Create folder structure"""
-    for folder in [CLONE_D, INTERMEDIATE_D, ARCHIVE_CODE, LOGS_LIVE, LOGS_ARCHIVE, VERSIONS_DIR]:
+    for folder in [CLONE_D, INTERMEDIATE_D, ARCHIVE_CODE, LOGS_LIVE, LOGS_ARCHIVE, VERSIONS_DIR, INBOX_ARCHIVE]:
         folder.mkdir(parents=True, exist_ok=True)
 
 def log(msg):
@@ -90,10 +94,21 @@ def sync_clone():
 
 def sync_archive():
     """Sync current state to Google Drive archive"""
-    cmd = ['robocopy', str(SOURCE), str(ARCHIVE_CODE), '/MIR',
+    # 1. Sync Code
+    cmd_code = ['robocopy', str(SOURCE), str(ARCHIVE_CODE), '/MIR',
            '/XD', 'chrome_profile', '__pycache__', '.git', 'node_modules', 'venv', '.venv',
            '/XF', '*.tmp', '*.pyc', '/NP', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1']
-    return subprocess.run(cmd, capture_output=True).returncode <= 7
+    res_code = subprocess.run(cmd_code, capture_output=True).returncode <= 7
+
+    # 2. Sync Inbox (Antigravity Push)
+    if INBOX_SOURCE.exists():
+        cmd_inbox = ['robocopy', str(INBOX_SOURCE), str(INBOX_ARCHIVE), '/MIR',
+                     '/XF', '*.tmp', '/NP', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1']
+        res_inbox = subprocess.run(cmd_inbox, capture_output=True).returncode <= 7
+    else:
+        res_inbox = True # Skip if source doesn't exist
+
+    return res_code and res_inbox
 
 def create_version_snapshot():
     """Create timestamped version snapshot"""
