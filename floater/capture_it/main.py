@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication, QRubberBand)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QApplication, QRubberBand, QFrame)
 from PyQt6.QtCore import Qt, QPoint, QRect, QTimer, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QPainter, QPen, QScreen, QPixmap, QIcon
 
@@ -201,10 +201,25 @@ class CapturePanel(QWidget):
             print("📋 Copied to clipboard")
             
             # 2. Save to Disk (Inbox)
-            folder = r"D:\Antigravity_Inbox"
-            if not os.path.exists(folder):
+            # Use centralized registry for correct Inbox location
+            try:
+                from shared.module_registry import MODULES
+                folder = MODULES["capture-it"]["inbox"]
+            except ImportError:
+                print("⚠️ shared.module_registry not found, falling back to desktop")
                 folder = os.path.join(os.path.expanduser("~"), "Desktop")
-                
+            except KeyError:
+                print("⚠️ capture-it not in registry, falling back to desktop")
+                folder = os.path.join(os.path.expanduser("~"), "Desktop")
+
+            # Ensure folder exists
+            if not os.path.exists(folder):
+                try:
+                    os.makedirs(folder)
+                except Exception as e:
+                    print(f"❌ Failed to create inbox folder {folder}: {e}")
+                    folder = os.path.join(os.path.expanduser("~"), "Desktop")
+
             import datetime
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"capture_{ts}.png"
@@ -217,4 +232,3 @@ class CapturePanel(QWidget):
             
         except Exception as e:
             print(f"❌ Save failed: {e}")
-
