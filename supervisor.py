@@ -19,9 +19,19 @@ def check_singleton():
                 pid = int(f.read().strip())
             
             if psutil.pid_exists(pid):
-                logger.error(f"⛔ Supervisor already running (PID {pid}). Exiting.")
-                print(f"Supervisor is already running (PID {pid}). Please kill it first or just close this window.")
-                sys.exit(1)
+                try:
+                    proc = psutil.Process(pid)
+                    # Check if it's actually this script
+                    cmdline = proc.cmdline()
+                    # We look for 'supervisor.py' in the command line
+                    if any('supervisor.py' in arg for arg in cmdline):
+                        logger.error(f"⛔ Supervisor already running (PID {pid}). Exiting.")
+                        print(f"Supervisor is already running (PID {pid}). Please kill it first or just close this window.")
+                        sys.exit(1)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                     pass
+
+                logger.info("Found stale lock file (PID reused or invalid). Overwriting.")
             else:
                 logger.info("Found stale lock file. Overwriting.")
         except:
