@@ -86,10 +86,10 @@ class BrowserAgent(BaseAgent):
                 self.logger.error(f"❌ Search for {query} timed out after 30s")
             
         elif action == "type":
-            # Basic implementation via script if CDP input not available
-            text = payload.get("text", "")
-            # TODO: Implement proper typing
-            pass
+            text = payload.get("text", "") or payload.get("input", "")
+            selector = payload.get("selector") or payload.get("subject")
+            await self.controller.type_text(text, selector)
+            self.logger.info(f"✅ Typed '{text}'")
             
         elif action == "click":
              # TODO: Implement clicking
