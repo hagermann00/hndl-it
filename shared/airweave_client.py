@@ -113,6 +113,30 @@ class AirweaveClient:
             logger.error(f"Airweave search failed: {e}")
             return []
 
+    def store(
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Store content in Airweave.
+
+        Args:
+            content: The text content to store
+            metadata: Optional metadata dictionary
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if self.mode == "http":
+                return self._store_http(content, metadata)
+            else:
+                return self._store_mcp(content, metadata)
+        except Exception as e:
+            logger.error(f"Airweave store failed: {e}")
+            return False
+
     def _search_http(
         self,
         query: str,
@@ -139,6 +163,30 @@ class AirweaveClient:
         
         data = response.json()
         return self._parse_results(data.get("results", []))
+
+    def _store_http(
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Store via HTTP API."""
+        import requests
+
+        url = f"{self.base_url}/collections/{self.collection}/documents"
+        headers = {"x-api-key": self.api_key} if self.api_key else {}
+
+        payload = {
+            "documents": [
+                {
+                    "content": content,
+                    "metadata": metadata or {}
+                }
+            ]
+        }
+
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        return True
 
     def _search_mcp(
         self,
@@ -197,6 +245,16 @@ class AirweaveClient:
             return self._parse_results(data.get("results", []))
         
         return []
+
+    def _store_mcp(
+        self,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Store via MCP subprocess call."""
+        # TODO: Implement MCP store tool when available
+        logger.warning("MCP store mode not yet implemented. Please use HTTP mode.")
+        return False
 
     def _parse_results(self, raw_results: List[Dict]) -> List[AirweaveResult]:
         """Parse raw API results into AirweaveResult objects."""

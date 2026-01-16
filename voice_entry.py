@@ -92,6 +92,17 @@ def main():
             # Move blocking LLM call to background thread to prevent UI freeze
             def _worker():
                 print(f"🎤 Voice Process: '{text}'")
+            print(f"🎤 Voice Process: '{text}'")
+            
+            # Ask the Brain
+            try:
+                import asyncio
+                intent = asyncio.run(orchestrator.process(text))
+                print(f"🧠 Orchestrator Intent: {intent}")
+                
+                target = intent.get("target")
+                action = intent.get("action")
+                params = intent.get("params", {})
                 
                 # Ask the Brain
                 try:
