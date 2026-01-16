@@ -169,8 +169,19 @@ class Orchestrator:
                             method="airweave_direct"
                         )
                     elif action == "store":
-                        # TODO: Implement store
-                        pass
+                        content = params.get("subject", clean_input)
+                        success = client.store(content)
+
+                        if success:
+                            return self._construct_intent(
+                                target="floater",
+                                action="confirm",
+                                params={"message": f"✓ Stored in Memory: {content[:50]}...", "source": "airweave"},
+                                confidence=1.0,
+                                method="airweave_direct"
+                            )
+                        else:
+                            return self._error("Failed to store in Airweave", clean_input)
                 
                 return self._construct_intent(
                     target=target,

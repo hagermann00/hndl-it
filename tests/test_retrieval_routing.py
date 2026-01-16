@@ -9,6 +9,10 @@ import logging
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Mock ollama before importing orchestrator
+from unittest.mock import MagicMock
+sys.modules["ollama"] = MagicMock()
+
 from shared.orchestrator import Orchestrator
 
 # Mock Airweave Client to avoid needing the real backend for this unit test
