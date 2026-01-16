@@ -113,6 +113,64 @@ class AirweaveClient:
             logger.error(f"Airweave search failed: {e}")
             return []
 
+    def get_entity(self, entity_id: str) -> Optional[AirweaveResult]:
+        """Fetch a single entity by ID."""
+        try:
+            if self.mode == "http":
+                return self._get_entity_http(entity_id)
+            else:
+                return self._get_entity_mcp(entity_id)
+        except Exception as e:
+            logger.error(f"Airweave get_entity failed: {e}")
+            return None
+
+    def _get_entity_http(self, entity_id: str) -> Optional[AirweaveResult]:
+        """Fetch entity via HTTP API."""
+        import requests
+
+        headers = {"x-api-key": self.api_key} if self.api_key else {}
+
+        # Try direct point retrieval (common Vector DB pattern)
+        # We try a few common patterns since API isn't strictly documented here
+        endpoints = [
+            f"/collections/{self.collection}/points/{entity_id}",
+            f"/collections/{self.collection}/objects/{entity_id}",
+            f"/collections/{self.collection}/documents/{entity_id}"
+        ]
+
+        for endpoint in endpoints:
+            try:
+                url = f"{self.base_url}{endpoint}"
+                response = requests.get(url, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Ensure we have a valid item structure
+                    # Qdrant style: {"result": {"id": ..., "payload": ...}}
+                    item = data.get("result", data)
+                    if item:
+                         return self._parse_single_result(item)
+            except Exception:
+                continue
+
+        # Fallback: Search for the ID
+        logger.debug(f"Direct fetch failed for {entity_id}, falling back to search")
+        results = self._search_http(entity_id, limit=1, recency_bias=0, score_threshold=0.0)
+
+        # Strict matching check
+        for res in results:
+            if str(res.entity_id) == str(entity_id):
+                return res
+
+        return None
+
+    def _get_entity_mcp(self, entity_id: str) -> Optional[AirweaveResult]:
+        """Fetch entity via MCP."""
+        # MCP doesn't support direct get in this version, fallback to search
+        results = self._search_mcp(entity_id, limit=1, recency_bias=0, score_threshold=0.0)
+        for res in results:
+            if str(res.entity_id) == str(entity_id):
+                return res
+        return None
     def store(
         self,
         content: str,
@@ -246,6 +304,17 @@ class AirweaveClient:
         
         return []
 
+    def _parse_single_result(self, item: Dict) -> AirweaveResult:
+        """Parse a single raw result item into AirweaveResult."""
+        payload = item.get("payload", {})
+        return AirweaveResult(
+            score=item.get("score", 0.0),
+            title=payload.get("title", "Untitled"),
+            content=payload.get("md_content", payload.get("content", "")),
+            source_name=payload.get("source_name", "Unknown"),
+            entity_id=payload.get("entity_id", ""),
+            metadata=payload.get("metadata", {})
+        )
     def _store_mcp(
         self,
         content: str,
@@ -258,18 +327,7 @@ class AirweaveClient:
 
     def _parse_results(self, raw_results: List[Dict]) -> List[AirweaveResult]:
         """Parse raw API results into AirweaveResult objects."""
-        results = []
-        for item in raw_results:
-            payload = item.get("payload", {})
-            results.append(AirweaveResult(
-                score=item.get("score", 0.0),
-                title=payload.get("title", "Untitled"),
-                content=payload.get("md_content", payload.get("content", "")),
-                source_name=payload.get("source_name", "Unknown"),
-                entity_id=payload.get("entity_id", ""),
-                metadata=payload.get("metadata", {})
-            ))
-        return results
+        return [self._parse_single_result(item) for item in raw_results]
 
     def to_a2ui(self, results: List[AirweaveResult]) -> Dict[str, Any]:
         """
