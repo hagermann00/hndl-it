@@ -10,6 +10,8 @@ import subprocess
 import json
 import logging
 import os
+import asyncio
+import httpx
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
@@ -85,7 +87,7 @@ class AirweaveClient:
         
         logger.info(f"AirweaveClient initialized: mode={mode}, collection={collection}")
 
-    def search(
+    async def search(
         self,
         query: str,
         limit: int = 10,
@@ -106,14 +108,14 @@ class AirweaveClient:
         """
         try:
             if self.mode == "http":
-                return self._search_http(query, limit, recency_bias, score_threshold)
+                return await self._search_http(query, limit, recency_bias, score_threshold)
             else:
-                return self._search_mcp(query, limit, recency_bias, score_threshold)
+                return await self._search_mcp(query, limit, recency_bias, score_threshold)
         except Exception as e:
             logger.error(f"Airweave search failed: {e}")
             return []
 
-    def _search_http(
+    async def _search_http(
         self,
         query: str,
         limit: int,
@@ -121,7 +123,6 @@ class AirweaveClient:
         score_threshold: float
     ) -> List[AirweaveResult]:
         """Search via HTTP API."""
-        import requests
         
         url = f"{self.base_url}/collections/{self.collection}/search"
         headers = {"x-api-key": self.api_key} if self.api_key else {}
@@ -134,13 +135,14 @@ class AirweaveClient:
             "response_type": "raw"
         }
         
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
         return self._parse_results(data.get("results", []))
 
-    def _search_mcp(
+    async def _search_mcp(
         self,
         query: str,
         limit: int,
@@ -170,16 +172,19 @@ class AirweaveClient:
         env["AIRWEAVE_COLLECTION"] = self.collection
         env["AIRWEAVE_BASE_URL"] = self.base_url
         
+        def run_subprocess():
+            return subprocess.run(
+                ["npx", "airweave-mcp-search"],
+                input=json.dumps(mcp_request),
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=self.mcp_path,
+                timeout=30
+            )
+
         # Call MCP server
-        result = subprocess.run(
-            ["npx", "airweave-mcp-search"],
-            input=json.dumps(mcp_request),
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=self.mcp_path,
-            timeout=30
-        )
+        result = await asyncio.to_thread(run_subprocess)
         
         if result.returncode != 0:
             logger.error(f"MCP search failed: {result.stderr}")

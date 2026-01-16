@@ -5,6 +5,7 @@ Simulates a user command "recall Y-IT Research" to verify Airweave triggering.
 import sys
 import os
 import logging
+import asyncio
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
@@ -14,7 +15,7 @@ from shared.orchestrator import Orchestrator
 # Mock Airweave Client to avoid needing the real backend for this unit test
 import shared.airweave_client
 class MockAirweaveClient:
-    def search(self, query, limit=5, **kwargs):
+    async def search(self, query, limit=5, **kwargs):
         return [
             shared.airweave_client.AirweaveResult(
                 score=0.9, title="Mock Result", content="Content", 
@@ -26,12 +27,12 @@ class MockAirweaveClient:
 
 shared.airweave_client.get_airweave_client = lambda: MockAirweaveClient()
 
-def test_retrieval():
+async def test_retrieval_async():
     orch = Orchestrator()
     
     # Test regex triggering
     cmd = "recall Y-IT Research"
-    result = orch.process(cmd)
+    result = await orch.process(cmd)
     
     print(f"Command: {cmd}")
     print(f"Result Target: {result['target']}")
@@ -42,6 +43,9 @@ def test_retrieval():
         print("✅ SUCCESS: Retrieval command routed to A2UI render!")
     else:
         print("❌ FAILURE: Incorrect routing")
+
+def test_retrieval():
+    asyncio.run(test_retrieval_async())
 
 if __name__ == "__main__":
     test_retrieval()

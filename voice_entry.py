@@ -92,7 +92,8 @@ def main():
             
             # Ask the Brain
             try:
-                intent = orchestrator.process(text)
+                import asyncio
+                intent = asyncio.run(orchestrator.process(text))
                 print(f"🧠 Orchestrator Intent: {intent}")
                 
                 target = intent.get("target")
