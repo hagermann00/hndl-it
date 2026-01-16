@@ -67,6 +67,46 @@ def cleanup_lock():
     except:
         pass
 
+def cleanup_orphaned_agents():
+    """Kill any existing agent processes from previous runs."""
+    try:
+        import psutil
+        current_pid = os.getpid()
+
+        # known agent scripts identifiers
+        agent_keywords = ["ipc_handler.py", "monitor.py"]
+
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.pid == current_pid:
+                    continue
+
+                cmdline = proc.cmdline()
+                if not cmdline:
+                    continue
+
+                cmd_str = ' '.join(cmdline)
+
+                # Check if it's one of our agents
+                is_agent = False
+                for kw in agent_keywords:
+                    if kw in cmd_str:
+                        # Ensure it's part of our project path or structure
+                        # We look for path components typical to our repo
+                        if "agents" in cmd_str or "read-it" in cmd_str or "dump_agent.py" in cmd_str:
+                             is_agent = True
+                             break
+
+                if is_agent:
+                    logger.info(f"🧹 Killing orphaned agent (PID {proc.pid})")
+                    proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning(f"Error cleaning orphans: {e}")
+
 def get_python_exe():
     """Get the best available python executable."""
     venvs = [
@@ -476,6 +516,8 @@ def launch_all():
             logger.error(f"❌ Failed to load {mod['id']}: {e}")
 
     # BACKGROUND AGENTS
+    cleanup_orphaned_agents()
+
     agent_scripts = [
         ("read", os.path.join(PROJECT_ROOT, "read-it", "ipc_handler.py")),
         ("browser", os.path.join(PROJECT_ROOT, "agents", "browser", "ipc_handler.py")),
