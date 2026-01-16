@@ -7,6 +7,12 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+try:
+    import ollama
+except ImportError:
+    # Inject mock for testing in environment without dependencies
+    import scripts.mock_ollama_setup
+
 from shared.orchestrator import get_orchestrator
 
 
@@ -47,8 +53,9 @@ def test_orchestrator():
     passed = 0
     failed = 0
     
+    import asyncio
     for command, expected_target, expected_action in test_cases:
-        result = orchestrator.process(command)
+        result = asyncio.run(orchestrator.process(command))
         
         target = result.get("target", "")
         action = result.get("action", "")

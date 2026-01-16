@@ -5,9 +5,15 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    import ollama
+except ImportError:
+    import scripts.mock_ollama_setup
+
 from shared.orchestrator import Orchestrator
 
 def test_fuzzy_fallback():
+    import asyncio
     print("Testing Fuzzy Fallback (Simulating LLM Error)...")
     orc = Orchestrator()
     # Force LLM router to fail by giving it a bad URL
@@ -20,7 +26,7 @@ def test_fuzzy_fallback():
     ]
     
     for cmd in commands:
-        intent = orc.process(cmd)
+        intent = asyncio.run(orc.process(cmd))
         print(f"Command: {cmd}")
         print(f"  Target: {intent['target']}")
         print(f"  Action: {intent['action']}")

@@ -9,6 +9,11 @@ import logging
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    import ollama
+except ImportError:
+    import scripts.mock_ollama_setup
+
 from shared.orchestrator import Orchestrator
 
 # Mock Airweave Client to avoid needing the real backend for this unit test
@@ -27,11 +32,12 @@ class MockAirweaveClient:
 shared.airweave_client.get_airweave_client = lambda: MockAirweaveClient()
 
 def test_retrieval():
+    import asyncio
     orch = Orchestrator()
     
     # Test regex triggering
     cmd = "recall Y-IT Research"
-    result = orch.process(cmd)
+    result = asyncio.run(orch.process(cmd))
     
     print(f"Command: {cmd}")
     print(f"Result Target: {result['target']}")

@@ -7,7 +7,7 @@ Uses tiered routing: Regex (0ms) -> Router LLM (fast) -> Brain LLM (complex)
 import json
 import re
 import logging
-from ollama import Client
+from ollama import AsyncClient
 from typing import Dict, Any, Optional, List, Tuple
 from shared.llm_config import ACTIVE_ROLES
 
@@ -37,7 +37,7 @@ class Orchestrator:
     def __init__(self):
         self.router_model = ACTIVE_ROLES["router"]  # gemma2:2b
         self.brain_model = ACTIVE_ROLES["brain"]    # qwen2.5:3b
-        self.client = Client(host='http://localhost:11434', timeout=5)
+        self.client = AsyncClient(host='http://localhost:11434', timeout=5)
         
         # Statistics for monitoring
         self.stats = {"regex_hits": 0, "router_hits": 0, "errors": 0}
@@ -115,7 +115,7 @@ class Orchestrator:
         # Compile patterns for performance
         self._compiled = [(re.compile(p, re.IGNORECASE), t, a) for p, t, a in self.patterns]
 
-    def process(self, user_input: str) -> Dict[str, Any]:
+    async def process(self, user_input: str) -> Dict[str, Any]:
         """
         Main entry point. Returns structured intent.
         
@@ -182,14 +182,14 @@ class Orchestrator:
         
         # 2. Smart Path: LLM Router
         try:
-            result = self._ask_router(clean_input)
+            result = await self._ask_router(clean_input)
             self.stats["router_hits"] += 1
             return result
         except Exception as e:
             logger.warning(f"Router failed, attempting fuzzy fallback: {e}")
             return self._fuzzy_fallback(clean_input)
 
-    def _ask_router(self, user_input: str) -> Dict[str, Any]:
+    async def _ask_router(self, user_input: str) -> Dict[str, Any]:
         """
         Asks Router LLM (Gemma 2B) to classify intent.
         Optimized for speed with low temperature and tiny context.
@@ -207,7 +207,7 @@ Examples:
 """
 
         try:
-            response = self.client.generate(
+            response = await self.client.generate(
                 model=self.router_model,
                 prompt=prompt,
                 stream=False,
