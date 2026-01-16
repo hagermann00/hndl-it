@@ -134,31 +134,19 @@ class SystemsEngineer:
         key_processes = ["launch_suite.py", "orchestrator", "monitor.py"]
         found = []
         current_pids = set()
-        
-        # Iterate all PIDs
-        for pid in psutil.pids():
+
+        # More efficient process iteration
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                # Use cached process object if possible to keep CPU stats
-                if pid in self.process_cache:
-                    proc = self.process_cache[pid]
-                else:
-                    proc = psutil.Process(pid)
+                pid = proc.pid
+                current_pids.add(pid)
+
+                # Ensure process is in cache for CPU tracking.
+                if pid not in self.process_cache:
                     self.process_cache[pid] = proc
 
-                # Check if process is still alive
-                if not proc.is_running():
-                    del self.process_cache[pid]
-                    continue
-
-                # Filter for only relevant processes (Python)
-                try:
-                    name = proc.name()
-                    cmdline = proc.cmdline()
-                    cmd_str = ' '.join(cmdline)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-                current_pids.add(pid)
+                cmd_str = ' '.join(proc.cmdline() or [])
+                name = proc.name()
 
                 # 1. Identify key processes
                 for kp in key_processes:
@@ -171,18 +159,19 @@ class SystemsEngineer:
 
                 # 2. Zombie Hunting (if enabled)
                 if ENABLE_ZOMBIE_HUNTER and "python" in name.lower():
-                    # Call cpu_percent.
-                    cpu = proc.cpu_percent(interval=None)
+                    # Use the cached process object to get meaningful cpu_percent readings
+                    cached_proc = self.process_cache[pid]
+                    cpu = cached_proc.cpu_percent(interval=None)
 
                     if cpu > MAX_CPU_PERCENT:
                         # Start tracking if not already
                         if pid not in self.high_cpu_tracker:
                             self.high_cpu_tracker[pid] = time.time()
-                            logger.info(f"detected potential zombie {pid} with {cpu}% cpu")
+                            logger.info(f"detected potential zombie {pid} with {cpu:.1f}% cpu")
                         else:
                             # Check duration
                             duration = time.time() - self.high_cpu_tracker[pid]
-                            logger.info(f"tracking zombie {pid}: {duration:.1f}s > {MAX_DURATION_HIGH_CPU}s @ {cpu}%")
+                            logger.info(f"tracking zombie {pid}: {duration:.1f}s > {MAX_DURATION_HIGH_CPU}s @ {cpu:.1f}%")
                             if duration > MAX_DURATION_HIGH_CPU:
                                 self._summon_medic(pid, cmd_str, duration, cpu)
                     else:
@@ -191,19 +180,15 @@ class SystemsEngineer:
                             del self.high_cpu_tracker[pid]
 
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                if pid in self.process_cache:
-                    del self.process_cache[pid]
                 continue
 
-        # Cleanup cache for dead processes
-        for cached_pid in list(self.process_cache.keys()):
-            if cached_pid not in current_pids:
-                del self.process_cache[cached_pid]
-
-        # Cleanup tracker for dead processes
-        for tracked_pid in list(self.high_cpu_tracker.keys()):
-            if tracked_pid not in current_pids:
-                del self.high_cpu_tracker[tracked_pid]
+        # Cleanup cache and tracker for dead processes
+        dead_pids = set(self.process_cache.keys()) - current_pids
+        for pid in dead_pids:
+            if pid in self.process_cache:
+                del self.process_cache[pid]
+            if pid in self.high_cpu_tracker:
+                del self.high_cpu_tracker[pid]
                 
         return found
 
