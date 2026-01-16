@@ -37,6 +37,8 @@ class Orchestrator:
     def __init__(self):
         self.router_model = ACTIVE_ROLES["router"]  # gemma2:2b
         self.brain_model = ACTIVE_ROLES["brain"]    # qwen2.5:3b
+        self.ollama_host = 'http://localhost:11434'
+        # Client initialized per request to avoid event loop issues
         self.client = AsyncClient(host='http://localhost:11434', timeout=5)
         
         # Statistics for monitoring
@@ -157,7 +159,7 @@ class Orchestrator:
                     
                     if action == "search":
                         query = params.get("subject", clean_input)
-                        results = client.search(query, limit=5)
+                        results = await client.search(query, limit=5)
                         a2ui_payload = client.to_a2ui(results)
                         
                         # Return an intent that renders this A2UI payload on the floater
@@ -218,6 +220,8 @@ Examples:
 """
 
         try:
+            client = AsyncClient(host=self.ollama_host, timeout=5)
+            response = await client.generate(
             response = await self.client.generate(
                 model=self.router_model,
                 prompt=prompt,

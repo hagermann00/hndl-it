@@ -5,6 +5,7 @@ Quick tests for the semantic routing engine.
 
 import sys
 import os
+import asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 try:
@@ -16,7 +17,7 @@ except ImportError:
 from shared.orchestrator import get_orchestrator
 
 
-def test_orchestrator():
+async def test_orchestrator_async():
     """Test the Orchestrator with sample commands."""
     
     orchestrator = get_orchestrator()
@@ -55,6 +56,7 @@ def test_orchestrator():
     
     import asyncio
     for command, expected_target, expected_action in test_cases:
+        result = await orchestrator.process(command)
         result = asyncio.run(orchestrator.process(command))
         
         target = result.get("target", "")
@@ -89,6 +91,8 @@ def test_orchestrator():
     for key, value in stats.items():
         print(f"  {key}: {value}")
 
+def test_orchestrator():
+    asyncio.run(test_orchestrator_async())
 
 if __name__ == "__main__":
     test_orchestrator()

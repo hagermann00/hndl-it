@@ -1,5 +1,6 @@
 import sys
 import os
+import asyncio
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,12 +13,13 @@ except ImportError:
 
 from shared.orchestrator import Orchestrator
 
+async def test_fuzzy_fallback_async():
 def test_fuzzy_fallback():
     import asyncio
     print("Testing Fuzzy Fallback (Simulating LLM Error)...")
     orc = Orchestrator()
-    # Force LLM router to fail by giving it a bad URL
-    orc.api_url = "http://localhost:9999/bad" 
+    # Force LLM router to fail (Gemma 2B) by pointing to bad host
+    orc.ollama_host = 'http://localhost:9999'
     
     commands = [
         "please read this article",
@@ -26,6 +28,7 @@ def test_fuzzy_fallback():
     ]
     
     for cmd in commands:
+        intent = await orc.process(cmd)
         intent = asyncio.run(orc.process(cmd))
         print(f"Command: {cmd}")
         print(f"  Target: {intent['target']}")
@@ -36,7 +39,10 @@ def test_fuzzy_fallback():
         elif intent['method'] == "regex":
             print("  ℹ️ Regex hit (no fallback needed)")
         else:
-            print("  ❌ Fail")
+            print("  ❌ Fail (Got method: {intent['method']})")
+
+def test_fuzzy_fallback():
+    asyncio.run(test_fuzzy_fallback_async())
 
 if __name__ == "__main__":
     test_fuzzy_fallback()
