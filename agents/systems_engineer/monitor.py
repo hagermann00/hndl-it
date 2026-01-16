@@ -20,6 +20,7 @@ import logging
 import psutil
 import json
 import subprocess
+import shutil
 from datetime import datetime
 from typing import Dict, List, Any
 
@@ -109,18 +110,18 @@ class SystemsEngineer:
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage(PROJECT_ROOT)
         
-        # TODO: GPU VRAM check if `nvidia-smi` is available
         gpu_info = "N/A"
-        try:
-            # Simple nvidia-smi check
-            result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,memory.total', '--format=csv,noheader'],
-                capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                gpu_info = result.stdout.strip()
-        except:
-            pass
+        # Check if nvidia-smi is available before trying to run it
+        if shutil.which('nvidia-smi'):
+            try:
+                result = subprocess.run(
+                    ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,memory.total', '--format=csv,noheader'],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    gpu_info = result.stdout.strip()
+            except (subprocess.SubprocessError, OSError) as e:
+                logger.warning(f"Failed to query GPU info despite nvidia-smi being available: {e}")
 
         return {
             "cpu": cpu_percent,
