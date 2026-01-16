@@ -39,7 +39,7 @@
 
 ## Tech Stack
 
-- Python 3.11+
+- Python 3.13+
 - PyQt6 (UI)
 - Pure CDP (Chrome DevTools Protocol)
 - Ollama (Local LLMs)

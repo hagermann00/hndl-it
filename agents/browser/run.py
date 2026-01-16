@@ -19,7 +19,7 @@ def main():
         
         print("Installing dependencies (lightweight CDP only)...")
         subprocess.run([VENV_PYTHON, "-m", "pip", "install", "-q", 
-                       "websockets", "aiohttp", "requests"])
+                       "websockets", "httpx", "requests"])
     
     # Run server
     print("Starting Browser Agent...")

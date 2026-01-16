@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import json
-import aiohttp
+import httpx
 import websockets
 from typing import Optional, Dict, Any, List
 
@@ -19,12 +19,12 @@ class BrowserController:
     async def _get_debug_url(self) -> Optional[str]:
         """Fetches the WebSocket Debugger URL for the active page."""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.cdp_http_url}/json") as resp:
-                    if resp.status != 200:
-                        logger.error(f"CDP Endpoint returned {resp.status}")
-                        return None
-                    targets = await resp.json()
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{self.cdp_http_url}/json")
+                if resp.status_code != 200:
+                    logger.error(f"CDP Endpoint returned {resp.status_code}")
+                    return None
+                targets = resp.json()
                     
             # Filter for 'page' type and find valid socket
             # We want a 'page' that is not a background page if possible, or just the first one
@@ -169,30 +169,30 @@ class BrowserController:
         
         if target_id:
             # Get the new tab's websocket URL and connect to it
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.cdp_http_url}/json") as resp:
-                    targets = await resp.json()
-                    for t in targets:
-                        if t.get("id") == target_id:
-                            new_ws_url = t.get("webSocketDebuggerUrl")
-                            if new_ws_url:
-                                # Close old connection, open new
-                                if self.websocket:
-                                    await self.websocket.close()
-                                self.ws_url = new_ws_url
-                                self.websocket = await websockets.connect(new_ws_url)
-                                logger.info(f"Switched to new tab: {target_id}")
-                                await self._wait_for_load()
-                                return
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{self.cdp_http_url}/json")
+                targets = resp.json()
+                for t in targets:
+                    if t.get("id") == target_id:
+                        new_ws_url = t.get("webSocketDebuggerUrl")
+                        if new_ws_url:
+                            # Close old connection, open new
+                            if self.websocket:
+                                await self.websocket.close()
+                            self.ws_url = new_ws_url
+                            self.websocket = await websockets.connect(new_ws_url)
+                            logger.info(f"Switched to new tab: {target_id}")
+                            await self._wait_for_load()
+                            return
         
         logger.warning("Could not switch to new tab")
     
     async def get_tabs(self) -> List[Dict]:
         """Get list of all open tabs."""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.cdp_http_url}/json") as resp:
-                targets = await resp.json()
-                return [t for t in targets if t.get("type") == "page"]
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{self.cdp_http_url}/json")
+            targets = resp.json()
+            return [t for t in targets if t.get("type") == "page"]
 
     async def _wait_for_load(self, timeout: int = 10):
         """Polls readyState."""

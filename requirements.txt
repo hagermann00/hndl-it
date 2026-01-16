@@ -1,6 +1,6 @@
 websockets==14.1
 pydantic==2.10.3
-aiohttp==3.11.11
+httpx==0.28.1
 requests==2.32.3
 PyQt6==6.8.0
 ollama
@@ -12,3 +12,4 @@ keyboard
 psutil
 pyautogui
 watchdog
+pyttsx3==2.99
