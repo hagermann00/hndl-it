@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 import time
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), 'todos_v2.json')
+DATA_FILE = os.path.join(os.path.dirname(__file__), 'todos.json')
 
 class TodoItInterface:
     """
