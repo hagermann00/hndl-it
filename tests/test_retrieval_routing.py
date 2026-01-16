@@ -10,6 +10,14 @@ import asyncio
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    import ollama
+except ImportError:
+    import scripts.mock_ollama_setup
+# Mock ollama before importing orchestrator
+from unittest.mock import MagicMock
+sys.modules["ollama"] = MagicMock()
+
 from shared.orchestrator import Orchestrator
 
 # Mock Airweave Client to avoid needing the real backend for this unit test
@@ -28,11 +36,14 @@ class MockAirweaveClient:
 shared.airweave_client.get_airweave_client = lambda: MockAirweaveClient()
 
 async def test_retrieval_async():
+def test_retrieval():
+    import asyncio
     orch = Orchestrator()
     
     # Test regex triggering
     cmd = "recall Y-IT Research"
     result = await orch.process(cmd)
+    result = asyncio.run(orch.process(cmd))
     
     print(f"Command: {cmd}")
     print(f"Result Target: {result['target']}")

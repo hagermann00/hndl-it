@@ -29,6 +29,7 @@ class OrchestratorWorker(QObject):
             import asyncio
             from shared.orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
+            # Run async process synchronously in this worker thread
             intent = asyncio.run(orchestrator.process(self.text))
             self.finished.emit(intent)
         except Exception as e:

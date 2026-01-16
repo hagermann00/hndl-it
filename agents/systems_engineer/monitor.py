@@ -20,6 +20,7 @@ import logging
 import psutil
 import json
 import subprocess
+import shutil
 from datetime import datetime
 from typing import Dict, List, Any
 
@@ -109,18 +110,18 @@ class SystemsEngineer:
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage(PROJECT_ROOT)
         
-        # TODO: GPU VRAM check if `nvidia-smi` is available
         gpu_info = "N/A"
-        try:
-            # Simple nvidia-smi check
-            result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,memory.total', '--format=csv,noheader'],
-                capture_output=True, text=True
-            )
-            if result.returncode == 0:
-                gpu_info = result.stdout.strip()
-        except:
-            pass
+        # Check if nvidia-smi is available before trying to run it
+        if shutil.which('nvidia-smi'):
+            try:
+                result = subprocess.run(
+                    ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,memory.total', '--format=csv,noheader'],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    gpu_info = result.stdout.strip()
+            except (subprocess.SubprocessError, OSError) as e:
+                logger.warning(f"Failed to query GPU info despite nvidia-smi being available: {e}")
 
         return {
             "cpu": cpu_percent,
@@ -220,6 +221,58 @@ class SystemsEngineer:
         except Exception as e:
             logger.error(f"Failed to summon medic: {e}")
 
+    def _read_last_n_lines(self, filepath: str, n: int = 50) -> List[str]:
+        """Efficiently read the last n lines of a file."""
+        if not os.path.exists(filepath):
+            return []
+
+        file_size = os.path.getsize(filepath)
+        if file_size == 0:
+            return []
+
+        block_size = 4096
+        # Safety limit: don't read more than 1MB to find 50 lines
+        max_bytes = max(1024 * 1024, n * 2000)
+
+        with open(filepath, 'rb') as f:
+            # Case 1: File is smaller than block size
+            if file_size <= block_size:
+                f.seek(0)
+                content = f.read()
+                try:
+                    decoded = content.decode('utf-8', errors='ignore')
+                except:
+                    decoded = ""
+                return decoded.splitlines(keepends=True)[-n:]
+
+            # Case 2: File is larger, seek from end
+            f.seek(0, os.SEEK_END)
+            file_end = f.tell()
+            current_pos = file_end
+            blocks = []
+            newlines_found = 0
+            bytes_read = 0
+
+            # Read blocks backwards until we have enough newlines or hit start or max_bytes
+            while current_pos > 0 and newlines_found < n and bytes_read < max_bytes:
+                step = min(block_size, current_pos)
+                current_pos -= step
+                f.seek(current_pos)
+                chunk = f.read(step)
+                blocks.append(chunk)
+                bytes_read += len(chunk)
+
+                newlines_found += chunk.count(b'\n')
+
+            total_data = b"".join(reversed(blocks))
+            try:
+                text = total_data.decode('utf-8', errors='ignore')
+            except:
+                text = ""
+
+            lines = text.splitlines(keepends=True)
+            return lines[-n:]
+
     def _scan_logs(self) -> List[str]:
         """Scan recent log files for ERROR patterns."""
         issues = []
@@ -233,12 +286,11 @@ class SystemsEngineer:
                     # Only read if modified in last 5 mins
                     mtime = os.path.getmtime(filepath)
                     if time.time() - mtime < CHECK_INTERVAL_SECONDS:
-                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                            # Read last 50 lines
-                            lines = f.readlines()[-50:]
-                            for line in lines:
-                                if any(p in line for p in patterns):
-                                    issues.append(f"[{filename}] {line.strip()[:100]}")
+                        # Efficiently read last 50 lines
+                        lines = self._read_last_n_lines(filepath, 50)
+                        for line in lines:
+                            if any(p in line for p in patterns):
+                                issues.append(f"[{filename}] {line.strip()[:100]}")
                 except Exception as e:
                     logger.warning(f"Could not scan log {filename}: {e}")
                     

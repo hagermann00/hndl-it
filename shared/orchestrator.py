@@ -39,6 +39,7 @@ class Orchestrator:
         self.brain_model = ACTIVE_ROLES["brain"]    # qwen2.5:3b
         self.ollama_host = 'http://localhost:11434'
         # Client initialized per request to avoid event loop issues
+        self.client = AsyncClient(host='http://localhost:11434', timeout=5)
         
         # Statistics for monitoring
         self.stats = {"regex_hits": 0, "router_hits": 0, "errors": 0}
@@ -170,8 +171,19 @@ class Orchestrator:
                             method="airweave_direct"
                         )
                     elif action == "store":
-                        # TODO: Implement store
-                        pass
+                        content = params.get("subject", clean_input)
+                        success = client.store(content)
+
+                        if success:
+                            return self._construct_intent(
+                                target="floater",
+                                action="confirm",
+                                params={"message": f"✓ Stored in Memory: {content[:50]}...", "source": "airweave"},
+                                confidence=1.0,
+                                method="airweave_direct"
+                            )
+                        else:
+                            return self._error("Failed to store in Airweave", clean_input)
                 
                 return self._construct_intent(
                     target=target,
@@ -210,6 +222,7 @@ Examples:
         try:
             client = AsyncClient(host=self.ollama_host, timeout=5)
             response = await client.generate(
+            response = await self.client.generate(
                 model=self.router_model,
                 prompt=prompt,
                 stream=False,

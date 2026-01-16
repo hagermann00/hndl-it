@@ -1,4 +1,5 @@
 import logging
+import threading
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QTextEdit, 
     QPushButton, QLabel, QWidget, QFrame, QProgressBar
@@ -12,6 +13,9 @@ class QuickDialog(QDialog):
     command_submitted = pyqtSignal(str)
     pause_requested = pyqtSignal()
     resume_requested = pyqtSignal()
+    render_update_requested = pyqtSignal(dict)
+    log_update_requested = pyqtSignal(str)
+    working_state_requested = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,6 +69,11 @@ class QuickDialog(QDialog):
         # Draggable variables
         self._drag_pos = QPoint()
         
+        # Connect thread-safe signals
+        self.render_update_requested.connect(self.render_a2ui)
+        self.log_update_requested.connect(self.add_log)
+        self.working_state_requested.connect(self.set_working)
+
         # Apply initial mode
         # Apply initial mode - Start specific
         self.apply_mode("bar")
@@ -623,7 +632,42 @@ class QuickDialog(QDialog):
         if action == "expand_result":
             entity_id = payload.get("entity_id", "")
             self.add_log(f"Expanding result: {entity_id}")
-            # TODO: Fetch full content from Airweave and display
+            self.set_working(True)
+
+            def worker():
+                try:
+                    from shared.airweave_client import get_airweave_client
+                    client = get_airweave_client()
+                    result = client.get_entity(entity_id)
+
+                    if result:
+                        full_payload = {
+                            "type": "Card",
+                            "id": f"full_{entity_id}",
+                            "props": {
+                                "title": result.title,
+                                "subtitle": f"Source: {result.source_name} | Score: {result.score:.2f}",
+                                "elevation": 3
+                            },
+                            "children": [
+                                {
+                                    "type": "Text",
+                                    "id": f"content_{entity_id}",
+                                    "props": {"text": result.content}
+                                }
+                            ]
+                        }
+                        self.render_update_requested.emit(full_payload)
+                        self.log_update_requested.emit(f"Expanded: {result.title}")
+                    else:
+                        self.log_update_requested.emit(f"Failed to fetch entity: {entity_id}")
+                except Exception as e:
+                    self.log_update_requested.emit(f"Error expanding result: {e}")
+                finally:
+                    self.working_state_requested.emit(False)
+
+            threading.Thread(target=worker, daemon=True).start()
+
         elif action == "search_again":
             query = payload.get("query", "")
             if query:
