@@ -92,8 +92,17 @@ class BrowserAgent(BaseAgent):
             pass
             
         elif action == "click":
-             # TODO: Implement clicking
-             pass
+            selector = payload.get("selector") or payload.get("subject")
+            if selector:
+                try:
+                    await asyncio.wait_for(self.controller.click_element(selector), timeout=10)
+                    self.logger.info(f"✅ Clicked element '{selector}'")
+                except asyncio.TimeoutError:
+                    self.logger.error(f"❌ Clicking element '{selector}' timed out.")
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to click element '{selector}': {e}")
+            else:
+                self.logger.error("❌ 'click' action requires a 'selector' or 'subject' in payload.")
 
         elif action == "close":
             await self.controller.close()
