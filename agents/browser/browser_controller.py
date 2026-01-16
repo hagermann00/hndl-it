@@ -237,6 +237,28 @@ class BrowserController:
         if not success:
             raise RuntimeError(f"Element {selector} not found")
 
+    async def type_text(self, text: str, selector: Optional[str] = None):
+        """Types text into the focused element or a specific element."""
+        if selector:
+            # Focus the element first using JS
+            safe_selector = json.dumps(selector)
+            focus_script = f"""
+                (function() {{
+                    const el = document.querySelector({safe_selector});
+                    if (el) {{
+                        el.focus();
+                        return true;
+                    }}
+                    return false;
+                }})()
+            """
+            focused = await self.execute_script(focus_script)
+            if not focused:
+                raise RuntimeError(f"Element {selector} not found for typing")
+
+        # Use CDP Input.insertText
+        await self._send_cdp("Input.insertText", {"text": text})
+
     async def execute_script(self, script: str) -> Any:
         """Runtime.evaluate wrapper."""
         # Ensure 'return' is handled if it's a raw expression?

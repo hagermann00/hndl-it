@@ -396,19 +396,7 @@ class TodoItApp:
     """Main todo-it application controller."""
     
     def __init__(self):
-        # Point to the v2 file
         self.data_file = os.path.join(os.path.dirname(__file__), 'todos.json')
-        # If v2 exists, use it? Or rename it?
-        # Let's assume migration happened and we use todos_v2.json for now for safety, or todos.json if standardized.
-        # Plan was to migrate and verify. Since we did that, we should point to the new structure.
-        # However, the user might expect 'todos.json'.
-        # Let's check if we want to use 'todos_v2.json' or overwrite.
-        # For this refactor, let's use 'todos_v2.json' to be safe, then rename via script if desired.
-        
-        v2_path = os.path.join(os.path.dirname(__file__), 'todos_v2.json')
-        if os.path.exists(v2_path):
-            self.data_file = v2_path
-            
         self.quick_input = QuickInputBox()
         self.panel = TodoPanel(self.data_file)
         

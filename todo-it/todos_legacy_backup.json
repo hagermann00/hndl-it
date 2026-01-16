@@ -1,0 +1,67 @@
+[
+  {
+    "id": "20260113125000000000",
+    "text": "Create Native Prompt Builder Application",
+    "completed": false,
+    "highlighted": false,
+    "created_at": "2026-01-13T12:50:00",
+    "parent_id": null,
+    "notes": "Resources:\n- Spreadsheets: https://docs.google.com/spreadsheets/d/19jzLgRruG9kjUQNKtCg1ZjdD6l6weA6qRXG5zLIAhC8/edit?gid=150872633#gid=150872633\n- Tutorial: https://github.com/anthropics/prompt-eng-interactive-tutorial\n- Library: https://platform.claude.com/docs/en/resources/prompt-library/library\n\nDocs to Include:\n- Overview\n- Prompt generator\n- Use prompt templates\n- Prompt improver\n- Be clear and direct\n- Use examples (multishot prompting)\n- Let Claude think (CoT)\n- Use XML tags\n- Give Claude a role (system prompts)\n- Prefill Claude's response\n- Chain complex prompts\n- Long context tips\n- Extended thinking tips\n[Link placeholder]",
+    "links": [
+      {
+        "title": "Spreadsheet",
+        "url": "https://docs.google.com/spreadsheets/d/19jzLgRruG9kjUQNKtCg1ZjdD6l6weA6qRXG5zLIAhC8/edit?gid=150872633#gid=150872633"
+      },
+      {
+        "title": "Tutorial",
+        "url": "https://github.com/anthropics/prompt-eng-interactive-tutorial"
+      },
+      {
+        "title": "Library",
+        "url": "https://platform.claude.com/docs/en/resources/prompt-library/library"
+      }
+    ],
+    "tags": [
+      "build",
+      "prompting"
+    ],
+    "children": []
+  },
+  {
+    "id": "20260113125507652314",
+    "text": "ecplreo claude and gemin cli intergartion",
+    "completed": false,
+    "highlighted": false,
+    "created_at": "2026-01-13T12:55:07.652314",
+    "parent_id": null,
+    "notes": "",
+    "links": [],
+    "tags": [],
+    "children": []
+  },
+  {
+    "id": "20260113133715526717",
+    "text": "y-it-ge taht shit done book one",
+    "completed": false,
+    "highlighted": false,
+    "created_at": "2026-01-13T13:37:15.526717",
+    "parent_id": null,
+    "notes": "",
+    "links": [],
+    "tags": [],
+    "children": [
+      {
+        "id": "20260113133720904626",
+        "text": "New sub-task",
+        "completed": false,
+        "highlighted": false,
+        "created_at": "2026-01-13T13:37:20.904626",
+        "parent_id": "20260113133715526717",
+        "notes": "",
+        "links": [],
+        "tags": [],
+        "children": []
+      }
+    ]
+  }
+]

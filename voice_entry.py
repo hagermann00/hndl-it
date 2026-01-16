@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+import threading
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtGui import QPainter, QBrush, QColor, QPen, QPixmap
 from PyQt6.QtCore import Qt, QRect
@@ -88,34 +89,49 @@ def main():
             1. "Go to Reddit" -> Orchestrator -> {target: browser, action: navigate...}
             2. IPC -> Browser
             """
+            # Move blocking LLM call to background thread to prevent UI freeze
+            def _worker():
+                print(f"🎤 Voice Process: '{text}'")
             print(f"🎤 Voice Process: '{text}'")
             
             # Ask the Brain
             try:
-                intent = orchestrator.process(text)
+                import asyncio
+                intent = asyncio.run(orchestrator.process(text))
                 print(f"🧠 Orchestrator Intent: {intent}")
                 
                 target = intent.get("target")
                 action = intent.get("action")
                 params = intent.get("params", {})
                 
-                if target and target != "floater":
-                    # Route to specific agent (todo, browser, read)
-                    # We normalize the paylod for our simple IPC
-                    # Currently IPC expects: send_command(target, action, payload)
-                    send_command(target, action, params)
+                # Ask the Brain
+                try:
+                    intent = orchestrator.process(text)
+                    print(f"🧠 Orchestrator Intent: {intent}")
                     
-                elif target == "floater":
-                    # Send back to main UI
-                    send_command("hndl", "input", {"text": text, "response": params.get("response")})
+                    target = intent.get("target")
+                    action = intent.get("action")
+                    params = intent.get("params", {})
                     
-            except Exception as e:
-                print(f"❌ Orchestration Failed: {e}")
-                # Fallback to dumb routing if Brain dies
-                target = "hndl"
-                if "read" in text.lower(): target = "read"
-                elif "todo" in text.lower(): target = "todo"
-                send_command(target, "input", {"text": text}) # Simplified
+                    if target and target != "floater":
+                        # Route to specific agent (todo, browser, read)
+                        # We normalize the paylod for our simple IPC
+                        # Currently IPC expects: send_command(target, action, payload)
+                        send_command(target, action, params)
+
+                    elif target == "floater":
+                        # Send back to main UI
+                        send_command("hndl", "input", {"text": text, "response": params.get("response")})
+
+                except Exception as e:
+                    print(f"❌ Orchestration Failed: {e}")
+                    # Fallback to dumb routing if Brain dies
+                    target = "hndl"
+                    if "read" in text.lower(): target = "read"
+                    elif "todo" in text.lower(): target = "todo"
+                    send_command(target, "input", {"text": text}) # Simplified
+
+            threading.Thread(target=_worker).start()
 
         def handle_listening(is_listening):
             icon.border_color = "#ff0000" if is_listening else "#ff00ff"
