@@ -211,7 +211,17 @@ class TodoModel(QAbstractItemModel):
         
         self.beginRemoveRows(parent_index, row, row)
         parent_node.children.pop(row)
-        del self.all_nodes[node.data['id']]
-        # TODO: cleanup children from all_nodes recursively if needed
+
+        self._cleanup_node_recursive(node)
+
         self.endRemoveRows()
         self.save_data()
+
+    def _cleanup_node_recursive(self, node):
+        """Recursively removes a node and its children from all_nodes."""
+        for child in node.children:
+            self._cleanup_node_recursive(child)
+
+        node_id = node.data.get('id')
+        if node_id and node_id in self.all_nodes:
+            del self.all_nodes[node_id]

@@ -86,14 +86,23 @@ class BrowserAgent(BaseAgent):
                 self.logger.error(f"❌ Search for {query} timed out after 30s")
             
         elif action == "type":
-            # Basic implementation via script if CDP input not available
-            text = payload.get("text", "")
-            # TODO: Implement proper typing
-            pass
+            text = payload.get("text", "") or payload.get("input", "")
+            selector = payload.get("selector") or payload.get("subject")
+            await self.controller.type_text(text, selector)
+            self.logger.info(f"✅ Typed '{text}'")
             
         elif action == "click":
-             # TODO: Implement clicking
-             pass
+            selector = payload.get("selector") or payload.get("subject")
+            if selector:
+                try:
+                    await asyncio.wait_for(self.controller.click_element(selector), timeout=10)
+                    self.logger.info(f"✅ Clicked element '{selector}'")
+                except asyncio.TimeoutError:
+                    self.logger.error(f"❌ Clicking element '{selector}' timed out.")
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to click element '{selector}': {e}")
+            else:
+                self.logger.error("❌ 'click' action requires a 'selector' or 'subject' in payload.")
 
         elif action == "close":
             await self.controller.close()

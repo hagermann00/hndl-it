@@ -13,6 +13,9 @@ try:
     import ollama
 except ImportError:
     import scripts.mock_ollama_setup
+# Mock ollama before importing orchestrator
+from unittest.mock import MagicMock
+sys.modules["ollama"] = MagicMock()
 
 from shared.orchestrator import Orchestrator
 
