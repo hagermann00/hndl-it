@@ -67,17 +67,23 @@ def speak_selected():
 
 
 def on_middle_click():
-    """Handle middle mouse click - speak selected text."""
+    """Handle middle mouse click - Trigger Windows Native STT (Win+H)."""
     # Use threading to avoid blocking mouse events
-    threading.Thread(target=speak_selected, daemon=True).start()
+    def trigger_stt():
+        logger.info("🎤 Triggering Windows Native STT (Win+H)...")
+        # Small delay to ensure mouse event clears
+        time.sleep(0.1)
+        keyboard.send("windows+h")
+    
+    threading.Thread(target=trigger_stt, daemon=True).start()
 
 
 def register_tts_hotkeys():
-    """Register all TTS hotkeys."""
+    """Register all TTS hotkeys (and STT shortcuts)."""
     try:
-        # Middle mouse click to speak selected text
+        # Middle mouse click to trigger Native STT (Win+H)
         mouse.on_middle_click(on_middle_click)
-        logger.info("✅ Middle-click TTS registered")
+        logger.info("✅ Middle-click STT (Win+H) registered")
         
         # Ctrl+Alt+Win to speak selected text (in addition to Win+H passthrough)
         # Note: This supplements the existing Win+H passthrough in launch_suite.py
